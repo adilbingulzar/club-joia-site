@@ -2,19 +2,18 @@
  * Books the order in Alfred and returns the payment provider's page: { url }.
  * The buyer picks the gateway (noon, MultiSafepay or Pay.nl, see payment.gateways in lib/config)
  * and after payment Alfred sends the buyer to the event's success landing page (/thank-you).
- * Alfred has no CORS headers, so the browser can't call it directly.
+ * The buyer also picks how to pay on the gateway (credit card, iDEAL, ..., see ./methods).
  */
 import { NextResponse } from 'next/server';
 import { CJ_CONFIG as cfg, gateway, ticket } from '@/lib/config';
 import { country } from '@/lib/countries';
-
-const ALFRED_URL = (process.env.ALFRED_URL || '').replace(/\/+$/, '');
-const EVENT_ID = process.env.ALFRED_EVENT_ID || '';
+import { ALFRED_URL, EVENT_ID, alfred, paymentMethods, suggestedMethod } from '@/lib/alfred';
+import { getCatalog } from '@/lib/catalog';
 
 type Buyer = {
   firstName: string; lastName: string; email: string; repeatEmail: string;
   address: string; zipcode: string; city: string; country: string; gender: string;
-  birthday: string; phoneCode: string; phone: string; gateway: string; sms: boolean; terms: boolean;
+  birthday: string; phoneCode: string; phone: string; gateway: string; method: string; sms: boolean; terms: boolean;
 };
 
 class CheckoutError extends Error {}
@@ -36,7 +35,7 @@ function readBuyer(raw: Record<string, unknown>): Buyer {
     address: text(raw.address, 200), zipcode: text(raw.zipcode, 20), city: text(raw.city),
     country: text(raw.country, 2), gender: text(raw.gender, 10), birthday: text(raw.birthday, 10),
     phoneCode: text(raw.phoneCode, 2), phone: text(raw.phone, 20).replace(/[\s\-()]/g, ''), gateway: text(raw.gateway, 20),
-    sms: raw.sms === true, terms: raw.terms === true
+    method: text(raw.method, 10), sms: raw.sms === true, terms: raw.terms === true
   };
 
   if (!b.firstName || !b.lastName || !b.address || !b.zipcode || !b.city) throw new CheckoutError('Please fill in all fields.');
@@ -53,17 +52,6 @@ function readBuyer(raw: Record<string, unknown>): Buyer {
   return b;
 }
 
-async function alfred(path: string, data: Record<string, string>) {
-  const r = await fetch(ALFRED_URL + '/' + path, {
-    method: 'POST',
-    body: new URLSearchParams(data),
-    cache: 'no-store',
-    signal: AbortSignal.timeout(20000)
-  });
-  if (!r.ok) throw new Error('Alfred ' + path + ': HTTP ' + r.status);
-  return r.json();
-}
-
 // Alfred ticket ids of the event by name ("Ruby Red, 3 days"), so prices and stock stay in Alfred.
 async function alfredTicketIds(): Promise<Record<string, string>> {
   const list = await alfred('Api/Eventsnew/Tickettypes', { eventId: EVENT_ID, ticketType: '0' });
@@ -76,13 +64,13 @@ async function alfredTicketIds(): Promise<Record<string, string>> {
   return ids;
 }
 
-// Credit card when the engine offers it (MultiSafepay and Pay.nl also list iDEAL, Bancontact, ...).
-async function paymentTypeId(countryName: string, engine: string): Promise<string> {
-  const res = await alfred('Api/Eventsnew/buyTicketsPaymentMethods', { eventId: EVENT_ID, country: countryName, paymentEngine: engine });
-  const methods: { paymentTypeId: string; paymentMethod: string }[] = res && res.status === '1' ? res.paymentMethods : [];
-  if (!methods.length) throw new Error('Alfred has no payment method for ' + countryName + ' on ' + engine);
-  const card = methods.filter(function (m) { return m.paymentMethod === 'credit card payment'; })[0];
-  return String((card || methods[0]).paymentTypeId);
+// The buyer's method when the gateway offers it, else the suggested one (no method chosen yet).
+async function paymentTypeId(chosen: string, countryCode: string, engine: string): Promise<string> {
+  const methods = await paymentMethods(engine);
+  if (!methods.length) throw new Error('Alfred has no payment method on ' + engine);
+  if (!chosen) return suggestedMethod(methods, countryCode, engine);
+  if (!methods.some(function (m) { return m.id === chosen; })) throw new CheckoutError('Please choose how you want to pay.');
+  return chosen;
 }
 
 // Follows Alfred's payment link to the provider's payment page, so a payment that can't be
@@ -117,6 +105,8 @@ export async function POST(request: Request) {
     const buyer = readBuyer(body.buyer);
     const buyerCountry = country(buyer.country)!;
     const engine = gateway(buyer.gateway)!.engine;
+    const catalog = await getCatalog();
+    if (!catalog.live) throw new CheckoutError('Ticket prices can’t be loaded right now. You have not been charged. Please try again in a moment.');
     const ids = await alfredTicketIds();
 
     const form: Record<string, string> = {
@@ -132,7 +122,7 @@ export async function POST(request: Request) {
       age: buyer.birthday,
       countryPhoneCode: country(buyer.phoneCode)!.dial,
       phoneNumber: buyer.phone,
-      paymentTypeId: await paymentTypeId(buyerCountry.name.toLowerCase(), engine),
+      paymentTypeId: await paymentTypeId(buyer.method, buyerCountry.code, engine),
       paymentEngine: engine
     };
     if (buyer.sms) form.sendTicketWithSms = 'on';
@@ -140,7 +130,7 @@ export async function POST(request: Request) {
     body.items.slice(0, cfg.tickets.length).forEach(function (item: { id?: unknown; quantity?: unknown }, i: number) {
       const t = ticket(String(item && item.id));
       const quantity = Number(item && item.quantity);
-      if (!t || t.soldOut || !Number.isInteger(quantity) || quantity < 1 || quantity > cfg.maxPerTicket) {
+      if (!t || t.soldOut || !catalog.tickets[t.id] || catalog.tickets[t.id].soldOut || !Number.isInteger(quantity) || quantity < 1 || quantity > cfg.maxPerTicket) {
         throw new CheckoutError('Your order has a ticket that isn’t available. Please review your tickets.');
       }
       if (!ids[t.name]) throw new CheckoutError(t.name + ' isn’t on sale at the moment. Please choose another ticket.');

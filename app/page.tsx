@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import SiteNav, { Footer } from '@/components/SiteNav';
 import Countdown from '@/components/Countdown';
-import { CJ_CONFIG as cfg, money } from '@/lib/config';
+import { CJ_CONFIG as cfg } from '@/lib/config';
+import Price from '@/components/Price';
 
 export const metadata: Metadata = { title: 'Club JOIA 300 | Abu Dhabi Grand Prix, December 4, 5 & 6' };
 
@@ -23,7 +24,7 @@ function CompareTable() {
         })}</tr>;
       })}</tbody>
       <tfoot><tr><th scope="row">3-day access</th>{tiers.map(function (t) {
-        return <td key={t.id}><b>{money(t.prices['3-days'])}</b></td>;
+        return <td key={t.id}><b><Price tier={t.id} pkg="3-days" /></b></td>;
       })}</tr><tr><th scope="row"><span className="sr-only">Book</span></th>{tiers.map(function (t) {
         return <td key={t.id}><Link className="btn-ghost sm" href={'/tickets#' + t.id}>Select</Link></td>;
       })}</tr></tfoot>
@@ -45,7 +46,7 @@ export default function Home() {
               <p className="avail">Available access</p>
               <ul className="tiers hero-tiers">
                 {tiers.map(function (t) {
-                  return <li key={t.id}><Link href={t.page}><i className={'sw ' + t.swatch}></i><b>{t.name}</b><span>{money(t.prices['3-days'])}</span></Link></li>;
+                  return <li key={t.id}><Link href={t.page}><i className={'sw ' + t.swatch}></i><b>{t.name}</b><span><Price tier={t.id} pkg="3-days" /></span></Link></li>;
                 })}
               </ul>
               <p className="hero-note">Prices for 3-day access. Two-day packages also available.</p>
@@ -93,7 +94,7 @@ export default function Home() {
             <p style={{ color: 'var(--mute)', margin: 0, maxWidth: '60ch' }}>Three access levels, each available for all three days or as a two-day package.</p>
             <div className="access-cards">
               {tiers.map(function (t) {
-                return <Link className="access-card" href={t.page} key={t.id}><img src={t.card} alt={t.name + ' membership card'} width="2000" height="1262" loading="lazy" /><b>{t.name}</b><small>{t.perks.length + ' benefits, 3 days ' + money(t.prices['3-days'])}</small></Link>;
+                return <Link className="access-card" href={t.page} key={t.id}><img src={t.card} alt={t.name + ' membership card'} width="2000" height="1262" loading="lazy" /><b>{t.name}</b><small>{t.perks.length + ' benefits, 3 days '}<Price tier={t.id} pkg="3-days" /></small></Link>;
               })}
             </div>
           </div>

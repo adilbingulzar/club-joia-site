@@ -1,8 +1,8 @@
 /*
  * Club JOIA 300 — ticket catalogue and payment settings.
- * Edit this file to change access levels, day packages, prices, benefits
- * or where buyers pay. Every ticket = one access level + one day package.
- * Every page (home, access levels, tickets, summary) reads from here.
+ * Edit this file to change access levels, day packages, benefits or where buyers pay.
+ * Every ticket = one access level + one day package.
+ * Prices, currency and sold out come from Alfred (lib/catalog), matched by ticket name.
  */
 
 export type Package = { id: string; name: string; dates: string };
@@ -174,6 +174,17 @@ export function ticket(id: string): Ticket | null {
   return null;
 }
 
-export function money(n: number): string {
-  return CJ_CONFIG.currency + ' ' + n.toLocaleString('en-US');
+export function money(n: number, currency: string = CJ_CONFIG.currency): string {
+  return currency + ' ' + n.toLocaleString('en-US');
+}
+
+// What Alfred says about the tickets (lib/catalog), by ticket id ("ruby-red/3-days").
+export type Catalog = {
+  currency: string; // ISO code, "AED"
+  live: boolean;    // false: Alfred couldn't be reached, no prices
+  tickets: Record<string, { price: number | null; soldOut: boolean }>; // price null: not on sale in Alfred
+};
+
+export function unavailableCatalog(): Catalog {
+  return { currency: '', live: false, tickets: {} };
 }

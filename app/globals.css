@@ -286,8 +286,29 @@ button.btn{border:0;cursor:pointer;font-family:inherit}
 .buyer .gateway:has(input:checked){border-color:var(--gold)}
 .buyer .gateway input{width:18px;height:18px;margin:0;flex:none;accent-color:var(--gold)}
 .buyer .gateway small{display:block;font-size:12px;line-height:1.4;color:var(--mute)}
-.buyer .invalid input:not([type=checkbox]):not([type=radio]),.buyer .invalid select,.buyer .invalid .gateway{border-color:var(--err)}
+.buyer .methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:8px}
+.buyer .method{display:flex;gap:12px;align-items:center;background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:10px 14px;cursor:pointer;font-size:15px;color:var(--cream);letter-spacing:0;text-transform:none}
+.buyer .method:has(input:checked){border-color:var(--gold)}
+.buyer .method input{width:18px;height:18px;margin:0;flex:none;accent-color:var(--gold)}
+.buyer .method-icon{width:40px;height:40px;flex:none;border-radius:8px;background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.buyer .method-icon img{width:100%;height:100%;object-fit:contain}
+.buyer .methods-note{margin:8px 0 0;font-size:14px;color:var(--mute);letter-spacing:0;text-transform:none}
+#methods:focus{outline:none}
+.buyer .method.skeleton{cursor:default;min-height:62px}
+.buyer .skeleton i{display:block;flex:none;border-radius:6px;background:linear-gradient(90deg,rgba(196,200,206,.08) 0%,rgba(196,200,206,.22) 50%,rgba(196,200,206,.08) 100%);background-size:200% 100%;animation:sk-shine 1.2s ease-in-out infinite}
+.buyer .skeleton .sk-radio{width:18px;height:18px;border-radius:50%}
+.buyer .skeleton .sk-icon{width:40px;height:40px;border-radius:8px}
+.buyer .skeleton .sk-text{height:12px;flex:1;max-width:110px}
+.sk-line,.sk-stepper,.sk-row{display:inline-block;vertical-align:middle;border-radius:6px;background:linear-gradient(90deg,rgba(196,200,206,.08) 0%,rgba(196,200,206,.22) 50%,rgba(196,200,206,.08) 100%);background-size:200% 100%;animation:sk-shine 1.2s ease-in-out infinite}
+.sk-line{width:6.5em;height:.9em}
+.sk-stepper{width:118px;height:40px;border-radius:99px}
+.lines-loading{display:grid;gap:12px;margin:8px 0 32px}
+.sk-row{display:block;height:56px;border-radius:12px}
+@media (prefers-reduced-motion:reduce){.sk-line,.sk-stepper,.sk-row{animation:none}}
+@keyframes sk-shine{from{background-position:100% 0}to{background-position:-100% 0}}
+@media (prefers-reduced-motion:reduce){.buyer .skeleton i{animation:none}}
+.buyer .invalid input:not([type=checkbox]):not([type=radio]),.buyer .invalid select,.buyer .invalid .gateway,.buyer .invalid .method{border-color:var(--err)}
 .buyer .invalid input[type=checkbox]{outline:2px solid var(--err);outline-offset:2px}
 .buyer .field-error{display:block;margin-top:6px;color:var(--err);font-size:13px;font-weight:500;letter-spacing:0;text-transform:none}
 .order-id{margin-top:14px!important;color:#dfe1e5!important}
-@media (max-width:640px){.buyer .fields,.buyer .gateways{grid-template-columns:1fr}.buyer .row{grid-template-columns:1fr 1.4fr 1fr}}
+@media (max-width:640px){.buyer .fields,.buyer .gateways{grid-template-columns:1fr}.buyer .methods{grid-template-columns:1fr 1fr}.buyer .row{grid-template-columns:1fr 1.4fr 1fr}}

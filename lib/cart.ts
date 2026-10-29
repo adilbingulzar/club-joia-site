@@ -1,9 +1,10 @@
 /* Cart shared by every page. Stored in sessionStorage so it survives page changes. */
 import { useSyncExternalStore } from 'react';
 import { CJ_CONFIG as cfg, ticket, type Ticket } from './config';
+import { useCatalog } from './prices';
 
 type CartData = Record<string, number>;
-export type Line = { ticket: Ticket; quantity: number; subtotal: number };
+export type Line = { ticket: Ticket; quantity: number; price: number; subtotal: number };
 
 const KEY = 'cj300-cart';
 const EMPTY = '{}';
@@ -34,13 +35,14 @@ function subscribe(listener: () => void) {
   };
 }
 
-// Lines in catalogue order, ignoring unknown or sold-out tickets.
-function linesOf(cart: CartData): Line[] {
+// Lines in catalogue order at Alfred's prices, ignoring unknown or sold-out tickets.
+function linesOf(cart: CartData, catalog: ReturnType<typeof useCatalog>): Line[] {
   return cfg.tickets
-    .filter(function (t) { return cart[t.id] > 0 && !t.soldOut; })
+    .filter(function (t) { return cart[t.id] > 0 && !catalog.soldOut(t.id); })
     .map(function (t) {
       const q = Math.min(cart[t.id], cfg.maxPerTicket);
-      return { ticket: t, quantity: q, subtotal: q * t.price };
+      const price = catalog.price(t.id);
+      return { ticket: t, quantity: q, price: price, subtotal: q * price };
     });
 }
 
@@ -60,7 +62,7 @@ export const Cart = {
 /* The server (and the first client render) sees an empty cart; the stored cart is applied right after. */
 export function useCart() {
   const cart = parse(useSyncExternalStore(subscribe, snapshot, function () { return EMPTY; }));
-  const lines = linesOf(cart);
+  const lines = linesOf(cart, useCatalog());
   return {
     get: function (id: string): number { return cart[id] || 0; },
     lines: lines,

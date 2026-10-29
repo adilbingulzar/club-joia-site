@@ -2,23 +2,28 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useCart, useHydrated, type Line } from '@/lib/cart';
-import { CJ_CONFIG as cfg, gatewayFor, money } from '@/lib/config';
+import { CJ_CONFIG as cfg, gatewayFor } from '@/lib/config';
+import { useCatalog } from '@/lib/prices';
 import { countries, country } from '@/lib/countries';
 
 function pageUrl(path: string) { return new URL(path, location.href).href; }
 
 // The buyer details Alfred's own ticket shop asks for.
-type Buyer = {
+export type Buyer = {
   firstName: string; lastName: string; email: string; repeatEmail: string;
   address: string; zipcode: string; city: string; country: string; gender: string;
   day: string; month: string; year: string; phoneCode: string; phone: string;
-  gateway: string; sms: boolean; terms: boolean;
+  gateway: string; method: string; sms: boolean; terms: boolean;
 };
 
-const EMPTY_BUYER: Buyer = {
+export const EMPTY_BUYER: Buyer = {
   firstName: '', lastName: '', email: '', repeatEmail: '', address: '', zipcode: '', city: '',
-  country: '', gender: '', day: '', month: '', year: '', phoneCode: '', phone: '', gateway: '', sms: false, terms: false
+  country: '', gender: '', day: '', month: '', year: '', phoneCode: '', phone: '', gateway: '', method: '', sms: false, terms: false
 };
+
+// The gateway's payment methods (app/api/checkout/methods) for gateway + country `key`.
+type Method = { id: string; name: string; icon: string };
+type Methods = { key: string; list: Method[]; loading: boolean; failed: boolean };
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const thisYear = new Date().getFullYear();
@@ -29,22 +34,22 @@ const PHONE_CODES = countries.slice().sort(function (a, b) { return Number(a.dia
 function pad(n: string) { return n.length < 2 ? '0' + n : n; }
 
 // yyyy-mm-dd, or '' when the date doesn't exist (31 February).
-function birthday(b: Buyer): string {
+export function birthday(b: Buyer): string {
   if (!b.day || !b.month || !b.year) return '';
   const s = b.year + '-' + pad(b.month) + '-' + pad(b.day);
   const d = new Date(s + 'T00:00:00Z');
   return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s && d.getTime() < Date.now() ? s : '';
 }
 
-type Field = 'firstName' | 'lastName' | 'email' | 'repeatEmail' | 'address' | 'zipcode' | 'city' | 'country' | 'gender' | 'birthday' | 'phone' | 'gateway' | 'terms';
+type Field = 'firstName' | 'lastName' | 'email' | 'repeatEmail' | 'address' | 'zipcode' | 'city' | 'country' | 'gender' | 'birthday' | 'phone' | 'gateway' | 'method' | 'terms';
 
 // In form order, so the first one is the one to scroll to.
-const FIELDS: Field[] = ['firstName', 'lastName', 'email', 'repeatEmail', 'address', 'zipcode', 'city', 'country', 'gender', 'birthday', 'phone', 'gateway', 'terms'];
+const FIELDS: Field[] = ['firstName', 'lastName', 'email', 'repeatEmail', 'address', 'zipcode', 'city', 'country', 'gender', 'birthday', 'phone', 'gateway', 'method', 'terms'];
 
 const NAME = /^[\p{L}\p{M}' .\-]+$/u;
 
 // The same rules as app/api/checkout, with a message per field.
-function validate(b: Buyer): Partial<Record<Field, string>> {
+export function validate(b: Buyer, methods: Method[]): Partial<Record<Field, string>> {
   const e: Partial<Record<Field, string>> = {};
   const email = b.email.trim().toLowerCase();
   const phone = b.phone.replace(/[\s\-()]/g, '');
@@ -69,6 +74,7 @@ function validate(b: Buyer): Partial<Record<Field, string>> {
   else if (!phone) e.phone = 'Please enter your phone number.';
   else if (!/^\d{6,15}$/.test(phone)) e.phone = 'Please enter a valid phone number, digits only, without the country code.';
   if (!b.gateway) e.gateway = 'Please choose a payment method.';
+  else if (methods.length && !methods.some(function (m) { return m.id === b.method; })) e.method = 'Please choose how you want to pay.';
   if (!b.terms) e.terms = 'Please agree to the terms and conditions.';
   return e;
 }
@@ -78,11 +84,18 @@ function controlId(f: Field, b: Buyer): string {
   if (f === 'birthday') return !b.day ? 'day' : !b.month ? 'month' : 'year';
   if (f === 'phone') return b.phoneCode ? 'phone' : 'phoneCode';
   if (f === 'gateway') return 'gateway-' + cfg.payment.gateways[0].id;
+  if (f === 'method') return 'methods';
   return f;
+}
+
+function methodsKey(b: Buyer): string {
+  return b.gateway && b.country ? b.gateway + ':' + b.country : '';
 }
 
 export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string; paymentFailed: boolean }) {
   const cart = useCart();
+  const catalog = useCatalog();
+  const money = catalog.money;
   const hydrated = useHydrated();
   const lines = cart.lines;
   const n = cart.count;
@@ -93,7 +106,12 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
   // A field's error shows once the buyer has left it, or for every field after a submit.
   const [tried, setTried] = useState(false);
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({});
-  const errors = validate(buyer);
+  const [methods, setMethods] = useState<Methods>({ key: '', list: [], loading: false, failed: false });
+  const key = methodsKey(buyer);
+  const shownMethods = methods.key === key ? methods.list : [];
+  // Also before the load has started for a new gateway or country.
+  const methodsLoading = !!key && (methods.key !== key || methods.loading);
+  const errors = validate(buyer, shownMethods);
   const smsFee = buyer.sms ? cfg.payment.smsFee : 0;
 
   function error(f: Field): string {
@@ -128,6 +146,26 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
     }
   }, [msg]);
 
+  // The methods of the chosen gateway for the buyer's country, with its suggested one selected.
+  useEffect(function () {
+    if (!key) return;
+    let current = true;
+    const [g, c] = key.split(':');
+    setMethods({ key, list: [], loading: true, failed: false });
+    fetch(cfg.payment.checkoutEndpoint + '/methods?' + new URLSearchParams({ gateway: g, country: c }), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (data: { methods: Method[]; suggested: string }) {
+        if (!current) return;
+        setMethods({ key, list: data.methods || [], loading: false, failed: false });
+        setBuyer(function (b) { return methodsKey(b) === key ? { ...b, method: data.suggested || '' } : b; });
+      })
+      .catch(function () {
+        // Without the list the order goes with the suggested method (app/api/checkout).
+        if (current) setMethods({ key, list: [], loading: false, failed: true });
+      });
+    return function () { current = false; };
+  }, [key]);
+
   function set<K extends keyof Buyer>(key: K, value: Buyer[K]) {
     setBuyer(function (b) {
       const next = { ...b, [key]: value };
@@ -135,6 +173,8 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
       if (key === 'country' && (!b.phoneCode || b.phoneCode === b.country)) next.phoneCode = value as string;
       // A country change selects its gateway, the buyer can pick another one after.
       if (key === 'country') next.gateway = value ? gatewayFor(value as string) : '';
+      // The method list is the gateway's, it is loaded again.
+      if (key === 'country' || key === 'gateway') next.method = '';
       return next;
     });
   }
@@ -166,7 +206,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
 
   function pay(e: React.FormEvent, lines: Line[]) {
     e.preventDefault();
-    if (!lines.length) return;
+    if (!lines.length || methodsLoading) return;
     setMsg('');
     setTried(true);
 
@@ -191,7 +231,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
           firstName: buyer.firstName, lastName: buyer.lastName, email: buyer.email, repeatEmail: buyer.repeatEmail,
           address: buyer.address, zipcode: buyer.zipcode, city: buyer.city, country: buyer.country,
           gender: buyer.gender, birthday: dob, phoneCode: buyer.phoneCode, phone: buyer.phone, gateway: buyer.gateway,
-          sms: buyer.sms, terms: buyer.terms
+          method: buyer.method, sms: buyer.sms, terms: buyer.terms
         },
         successUrl: pageUrl('/thank-you'),
         cancelUrl: pageUrl('/summary')
@@ -214,14 +254,21 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
         {paymentFailed && <p className="alert error" role="alert">Your payment was not completed and you have not been charged. Please try again.</p>}
       </div>
 
-      {/* Both stay hidden until the stored cart has been read, as on the original site. */}
-      <div id="order" hidden={!hydrated || !lines.length}>
+      {/* Hidden until the stored cart has been read, as on the original site, and Alfred's prices are in. */}
+      {hydrated && !catalog.ready && <div className="lines-loading" role="status">
+        <span className="sr-only">Loading your order…</span>
+        {[0, 1, 2].map(function (i) { return <i key={i} className="sk-row" aria-hidden="true"></i>; })}
+      </div>}
+      {hydrated && catalog.ready && !catalog.live && <div className="empty">
+        <p className="alert error" role="alert">Ticket prices can’t be loaded right now. Your tickets are kept, please try again in a moment.</p>
+      </div>}
+      <div id="order" hidden={!hydrated || !catalog.live || !lines.length}>
         <table className="lines">
           <thead><tr><th scope="col">Ticket</th><th scope="col" className="num unit">Price</th><th scope="col" className="num">Qty</th><th scope="col" className="num">Subtotal</th></tr></thead>
           <tbody id="lines">
             {lines.map(function (l) {
               return <tr key={l.ticket.id}><td className="item"><i className={'sw ' + l.ticket.swatch}></i><span>{l.ticket.name}<small>{l.ticket.pkg.dates}</small></span></td>
-                <td className="num unit">{money(l.ticket.price)}</td>
+                <td className="num unit">{money(l.price)}</td>
                 <td className="num">{l.quantity}</td>
                 <td className="num">{money(l.subtotal)}</td></tr>;
             })}
@@ -301,6 +348,26 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
               </div>
               {errorText('gateway')}
             </fieldset>
+            {key && <fieldset className={'wide' + (error('method') ? ' invalid' : '')} id="methods" tabIndex={-1} aria-busy={methodsLoading}>
+              <legend>Pay with</legend>
+              {methodsLoading && <div className="methods" role="status">
+                <span className="sr-only">Loading payment options…</span>
+                {[0, 1, 2].map(function (i) {
+                  return <div key={i} className="method skeleton" aria-hidden="true"><i className="sk-radio"></i><i className="sk-icon"></i><i className="sk-text"></i></div>;
+                })}
+              </div>}
+              {methods.failed && methods.key === key && <p className="methods-note">We couldn’t load the payment options. You can still continue, you’ll pay by card (iDEAL or Bancontact in the Netherlands or Belgium on Pay.nl).</p>}
+              {!!shownMethods.length && <div className="methods">
+                {shownMethods.map(function (m) {
+                  return <label key={m.id} className="method">
+                    <input type="radio" name="method" value={m.id} checked={buyer.method === m.id} {...invalid('method')} onChange={function () { set('method', m.id); }} />
+                    <span className="method-icon">{m.icon && <img src={m.icon} alt="" width={40} height={40} loading="lazy" onError={function (e) { e.currentTarget.hidden = true; }} />}</span>
+                    <span>{m.name}</span>
+                  </label>;
+                })}
+              </div>}
+              {errorText('method')}
+            </fieldset>}
           </div>
 
           <label className="check">
@@ -318,7 +385,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
 
           <div className="actions">
             <Link className="btn-ghost" href="/tickets">Edit tickets</Link>
-            <button className="btn" id="pay" type="submit" disabled={busy}>{busy ? 'Redirecting…' : 'Proceed to payment'}</button>
+            <button className="btn" id="pay" type="submit" disabled={busy || methodsLoading}>{busy ? 'Redirecting…' : methodsLoading ? 'Loading payment options…' : 'Proceed to payment'}</button>
           </div>
           <p className="alert error" id="msg" role="alert" tabIndex={-1} ref={msgRef} hidden={!msg}>{msg}</p>
           <p className="note">
@@ -327,7 +394,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
         </form>
       </div>
 
-      <div className="empty" id="empty" hidden={!hydrated || !!lines.length}>
+      <div className="empty" id="empty" hidden={!hydrated || !catalog.live || !!lines.length}>
         <p>Your order is empty.</p>
         <Link className="btn" href="/tickets">Choose tickets</Link>
       </div>

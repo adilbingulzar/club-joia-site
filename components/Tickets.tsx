@@ -2,7 +2,8 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { Cart, useCart, useHydrated } from '@/lib/cart';
-import { CJ_CONFIG as cfg, money } from '@/lib/config';
+import { CJ_CONFIG as cfg } from '@/lib/config';
+import { useCatalog } from '@/lib/prices';
 
 function domId(id: string) { return id.replace('/', '--'); }
 
@@ -13,6 +14,7 @@ function domId(id: string) { return id.replace('/', '--'); }
 
 export function TierBlocks() {
   const cart = useCart();
+  const catalog = useCatalog();
   const hydrated = useHydrated();
   const n = cart.count;
 
@@ -32,7 +34,7 @@ export function TierBlocks() {
     <div className="tier-blocks" id="tiers">
       {cfg.tiers.map(function (tier) {
         const tickets = cfg.tickets.filter(function (t) { return t.tier === tier; });
-        const selected = tickets.some(function (t) { return !t.soldOut && cart.get(t.id) > 0; });
+        const selected = tickets.some(function (t) { return !catalog.soldOut(t.id) && cart.get(t.id) > 0; });
         return (
           <section className={'tier-block' + (selected ? ' selected' : '')} id={tier.id} aria-labelledby={'h-' + tier.id} key={tier.id}>
             <div className="tier-block-head"><Link href={tier.page}><img src={tier.card} alt={tier.name + ' membership card'} width="2000" height="1262" loading="lazy" /></Link>
@@ -45,10 +47,17 @@ export function TierBlocks() {
               {tickets.map(function (t) {
                 const label = tier.name + ', ' + t.pkg.name;
                 const q = cart.get(t.id);
+                const soldOut = catalog.soldOut(t.id);
                 return (
-                  <li className={'opt' + (!t.soldOut && q > 0 ? ' has-qty' : '')} id={'o-' + domId(t.id)} key={t.id}><div><b>{t.pkg.name}</b><small>{t.pkg.dates}</small></div>
-                    <span className="price">{money(t.price)}</span>
-                    {t.soldOut
+                  <li className={'opt' + (!soldOut && q > 0 ? ' has-qty' : '')} id={'o-' + domId(t.id)} key={t.id}><div><b>{t.pkg.name}</b><small>{t.pkg.dates}</small></div>
+                    <span className="price">{!catalog.ready
+                      ? <i className="sk-line" role="img" aria-label="Loading price"></i>
+                      : !catalog.live ? 'Price unavailable' : catalog.onSale(t.id) ? catalog.money(catalog.price(t.id)) : ''}</span>
+                    {!catalog.ready
+                      ? <i className="sk-stepper" aria-hidden="true"></i>
+                      : !catalog.live || !catalog.onSale(t.id)
+                      ? <span className="soldout">Not available</span>
+                      : soldOut
                       ? <span className="soldout">Sold out</span>
                       : <div className="stepper" role="group" aria-label={'Number of ' + label + ' tickets'}>
                           <button type="button" data-id={t.id} data-step="-1" aria-label={'Remove one ' + label + ' ticket'} disabled={q <= 0} onClick={function () { step(t.id, -1); }}>&minus;</button>
@@ -68,6 +77,7 @@ export function TierBlocks() {
 
 export function OrderBar() {
   const cart = useCart();
+  const catalog = useCatalog();
   const hydrated = useHydrated();
   const n = cart.count;
   if (!hydrated) return null;
@@ -77,7 +87,7 @@ export function OrderBar() {
       <div className="wrap">
         <div>
           <small id="bar-count">{n + (n === 1 ? ' ticket' : ' tickets')}</small>
-          <strong id="bar-total">{money(cart.total)}</strong>
+          <strong id="bar-total">{catalog.money(cart.total)}</strong>
         </div>
         <Link className="btn" href="/summary">Review order</Link>
       </div>
