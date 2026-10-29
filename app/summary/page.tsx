@@ -11,7 +11,7 @@ export default async function SummaryPage({ searchParams }: { searchParams: Prom
   return (
     <>
       <PageHeader cta={{ href: '/tickets', label: 'Get your access' }} />
-      <Summary termsUrl={(process.env.ALFRED_URL || '').replace(/\/+$/, '') + '/legal'} paymentFailed={failed} />
+      <Summary termsUrl="/terms" paymentFailed={failed} />
       <Footer />
     </>
   );

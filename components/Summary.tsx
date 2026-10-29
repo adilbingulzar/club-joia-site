@@ -374,10 +374,12 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
             <input type="checkbox" checked disabled />
             <span>Receive my tickets on {buyer.email.trim() || 'my email'}</span>
           </label>
+          {/* Hidden for now: tickets by SMS
           <label className="check">
             <input type="checkbox" name="sms" checked={buyer.sms} onChange={function (e) { set('sms', e.target.checked); }} />
             <span>Also receive tickets via SMS ({money(cfg.payment.smsFee)})</span>
           </label>
+          */}
           <label className={'check' + (error('terms') ? ' invalid' : '')}>
             <input type="checkbox" id="terms" name="terms" required checked={buyer.terms} {...invalid('terms')} onChange={function (e) { set('terms', e.target.checked); }} />
             <span>I agree to the <a href={termsUrl} target="_blank" rel="noopener">terms and conditions</a>.{errorText('terms')}</span>
@@ -398,6 +400,13 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
         <p>Your order is empty.</p>
         <Link className="btn" href="/tickets">Choose tickets</Link>
       </div>
+
+      {/* While Alfred books the order and until the payment page opens */}
+      {busy && <div className="page-loader" role="status" aria-live="polite">
+        <span className="loader-ring" aria-hidden="true"></span>
+        <p>Preparing your secure payment…</p>
+        <small>Please don’t close or refresh this page.</small>
+      </div>}
     </main>
   );
 }
