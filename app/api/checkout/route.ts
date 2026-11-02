@@ -54,7 +54,7 @@ function readBuyer(raw: Record<string, unknown>): Buyer {
 
 // Alfred ticket ids of the event by name ("Ruby Red, 3 days"), so prices and stock stay in Alfred.
 async function alfredTicketIds(): Promise<Record<string, string>> {
-  const list = await alfred('Api/Eventsnew/Tickettypes', { eventId: EVENT_ID, ticketType: '0' });
+  const list = await alfred('Api/Eventsnew/buyTicketsTicketTypes', { eventId: EVENT_ID, ticketType: '0' });
   const ids: Record<string, string> = {};
   if (Array.isArray(list)) {
     list.forEach(function (t) {
@@ -77,7 +77,8 @@ async function paymentTypeId(chosen: string, countryCode: string, engine: string
 // started (noon refusing the order, ...) is reported on the form instead of after a trip to Alfred.
 // null when Alfred ends on its denied or error page.
 async function paymentPage(url: string): Promise<string | null> {
-  const alfredOrigin = new URL(ALFRED_URL).origin;
+  // the server that made the link, ALFRED_URL can be the Europe server in front of it
+  const alfredOrigin = new URL(url).origin;
   for (let hop = 0; hop < 5; hop++) {
     const r = await fetch(url, { redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(20000) });
     const location = r.headers.get('location');

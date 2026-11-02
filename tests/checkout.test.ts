@@ -90,13 +90,13 @@ describe('checkout', function () {
   });
 
   it('refuses a ticket sold out in Alfred', async function () {
-    alfredMock({ 'Api/Eventsnew/Ticketsoldout': function () { return { left_tickets: 0 }; } });
+    alfredMock({ 'Api/Eventsnew/buyTicketsSoldOut': function () { return { left_tickets: 0 }; } });
     const res = await checkout();
     expect(res.body.error).toBe('Your order has a ticket that isn’t available. Please review your tickets.');
   });
 
   it('takes no order while Alfred\'s prices can\'t be loaded', async function () {
-    const alfred = alfredMock({ 'Api/Eventsnew/VendorEvents': null });
+    const alfred = alfredMock({ 'Api/Eventsnew/buyTicketsEvents': null });
     const res = await checkout();
     expect(res).toEqual({ status: 400, body: { error: 'Ticket prices can’t be loaded right now. You have not been charged. Please try again in a moment.' } });
     expect(alfred.count('Api/Eventsnew/buyTickets')).toBe(0);
@@ -114,6 +114,24 @@ describe('checkout', function () {
     });
     const res = await checkout({ country: 'AE', phoneCode: 'AE', phone: '501234567', gateway: 'noon' });
     expect(res.body).toEqual({ url: 'https://pay.noonpayments.com/en/default/index?info=x' });
+  });
+
+  it('follows the redirects of the server that made the link, behind ALFRED_URL', async function () {
+    const uae = 'http://uae.test/booking/onlinepayment/706/0?order=KEY';
+    alfredMock({ 'Api/Eventsnew/buyTickets': function () { return { status: '1', paymentUrl: uae }; } }, {
+      [uae]: { status: 302, location: 'http://uae.test/noon_payment/KEY' },
+      'http://uae.test/noon_payment/KEY': { status: 302, location: 'https://pay.noonpayments.com/en/default/index?info=x' }
+    });
+    const res = await checkout({ country: 'AE', phoneCode: 'AE', phone: '501234567', gateway: 'noon' });
+    expect(res.body).toEqual({ url: 'https://pay.noonpayments.com/en/default/index?info=x' });
+  });
+
+  it('reports a denied payment on the server that made the link', async function () {
+    const uae = 'http://uae.test/booking/onlinepayment/706/0?order=KEY';
+    alfredMock({ 'Api/Eventsnew/buyTickets': function () { return { status: '1', paymentUrl: uae }; } }, {
+      [uae]: { status: 302, location: 'http://uae.test/ticketing_denied?orderid=1' }
+    });
+    expect((await checkout()).status).toBe(400);
   });
 
   it('tells the buyer on the form when the gateway refuses the payment', async function () {

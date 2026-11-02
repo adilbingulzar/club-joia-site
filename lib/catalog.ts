@@ -1,7 +1,7 @@
 /*
  * Prices, currency and sold out of the tickets, from Alfred (server only):
- * the event's tickets (Api/Eventsnew/Tickettypes, matched by name, "Ruby Red, 3 days"),
- * how many are left of each (Ticketsoldout) and the event's currency (VendorEvents).
+ * the event's tickets (Api/Eventsnew/buyTicketsTicketTypes, matched by name, "Ruby Red, 3 days"),
+ * how many are left of each (buyTicketsSoldOut) and the event's currency (buyTicketsEvents).
  * Pages get the last answer at once and a newer one is fetched behind it when it is over a
  * minute old, so only the first page after a start waits for Alfred. When Alfred can't be
  * reached the last answer stays, else the catalogue is unavailable (no prices, no ordering).
@@ -23,8 +23,8 @@ async function load(): Promise<Catalog> {
   if (!ALFRED_URL || !EVENT_ID || !VENDOR_ID) throw new Error('ALFRED_URL, ALFRED_EVENT_ID and ALFRED_VENDOR_ID must be set');
 
   const [types, events] = await Promise.all([
-    alfred('Api/Eventsnew/Tickettypes', { eventId: EVENT_ID, ticketType: '0' }, TIMEOUT),
-    alfred('Api/Eventsnew/VendorEvents', { vendorId: VENDOR_ID }, TIMEOUT)
+    alfred('Api/Eventsnew/buyTicketsTicketTypes', { eventId: EVENT_ID, ticketType: '0' }, TIMEOUT),
+    alfred('Api/Eventsnew/buyTicketsEvents', { vendorId: VENDOR_ID }, TIMEOUT)
   ]);
   const event = (Array.isArray(events) ? events : []).filter(function (e) { return String(e && e.id) === EVENT_ID; })[0];
   const currency = event && CURRENCIES[event.eventCurrency];
@@ -40,7 +40,7 @@ async function load(): Promise<Catalog> {
     const a = byName[t.name];
     // not on sale in Alfred
     if (!a) { tickets[t.id] = { price: null, soldOut: true }; return; }
-    const left = await alfred('Api/Eventsnew/Ticketsoldout', { ticketId: String(a.id) }, TIMEOUT);
+    const left = await alfred('Api/Eventsnew/buyTicketsSoldOut', { ticketId: String(a.id) }, TIMEOUT);
     tickets[t.id] = { price: Number(a.ticketPrice), soldOut: t.soldOut || !(Number(left && left.left_tickets) > 0) };
   }));
 

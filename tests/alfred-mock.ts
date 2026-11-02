@@ -33,13 +33,13 @@ export const PAYMENT_URL = 'http://alfred.test/booking/onlinepayment/706/0?order
 export function alfredMock(answers: Record<string, Answer | null> = {}, pages: Record<string, Page> = {}) {
   const calls: { path: string; data: URLSearchParams }[] = [];
   const all: Record<string, Answer | null> = {
-    'Api/Eventsnew/Tickettypes': function () {
+    'Api/Eventsnew/buyTicketsTicketTypes': function () {
       return cfg.tickets.map(function (t) {
         return { id: TICKET_IDS[t.name], ticketDescription: t.name, ticketPrice: t.price + '.00', softDelete: '0', ticketVisible: '1' };
       });
     },
-    'Api/Eventsnew/VendorEvents': function () { return [{ id: '5263', eventCurrency: 'aed' }]; },
-    'Api/Eventsnew/Ticketsoldout': function () { return { left_tickets: 100 }; },
+    'Api/Eventsnew/buyTicketsEvents': function () { return [{ id: '5263', eventCurrency: 'aed' }]; },
+    'Api/Eventsnew/buyTicketsSoldOut': function () { return { left_tickets: 100 }; },
     'Api/Eventsnew/buyTicketsPaymentMethods': function (d) {
       return { status: '1', paymentMethods: METHODS[d.get('paymentEngine') || ''] || [] };
     },
