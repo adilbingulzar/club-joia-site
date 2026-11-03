@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import nextConfig from '../next.config';
-import { config } from '../proxy';
+import { config, proxy } from '../proxy';
 
 // the same conversion as Next's for this matcher: the whole path against the one pattern
-const gated = function (path: string) {
+const showsMaintenance = function (path: string) {
   return new RegExp('^' + config.matcher[0] + '$').test(path);
 };
 
@@ -24,19 +24,35 @@ describe('ticket email paths', function () {
     expect(await nextConfig.rewrites!()).toEqual([]);
   });
 
-  it('stay open during the private preview', function () {
-    expect(gated('/booking_events/pdf/abc')).toBe(false);
-    expect(gated('/Ajaxdorian/getQrcodeImage/T-1')).toBe(false);
-    expect(gated('/uploads/qrcodes/T-1.png')).toBe(false);
-    expect(gated('/assets/images/events/a.png')).toBe(false);
-    expect(gated('/ticketing/download')).toBe(false);
-    expect(gated('/downloadticketpdf/G-1')).toBe(false);
+  it('stay open during maintenance', function () {
+    expect(showsMaintenance('/booking_events/pdf/abc')).toBe(false);
+    expect(showsMaintenance('/Ajaxdorian/getQrcodeImage/T-1')).toBe(false);
+    expect(showsMaintenance('/uploads/qrcodes/T-1.png')).toBe(false);
+    expect(showsMaintenance('/assets/images/events/a.png')).toBe(false);
+    expect(showsMaintenance('/ticketing/download')).toBe(false);
+    expect(showsMaintenance('/downloadticketpdf/G-1')).toBe(false);
   });
 
-  it('leave the site itself behind the private preview', function () {
-    expect(gated('/')).toBe(true);
-    expect(gated('/tickets')).toBe(true);
-    expect(gated('/api/checkout')).toBe(true);
-    expect(gated('/assets/img/logo.png')).toBe(true);
+  it('leave the site itself behind the maintenance page', function () {
+    expect(showsMaintenance('/')).toBe(true);
+    expect(showsMaintenance('/tickets')).toBe(true);
+    expect(showsMaintenance('/api/checkout')).toBe(true);
+    expect(showsMaintenance('/assets/img/logo.png')).toBe(true);
+  });
+});
+
+describe('maintenance', function () {
+  it('shows the page while MAINTENANCE_MODE is true', async function () {
+    vi.stubEnv('MAINTENANCE_MODE', 'true');
+    const response = proxy();
+    expect(response.status).toBe(503);
+    expect(await response.text()).toContain('under maintenance');
+  });
+
+  it('leaves the site open otherwise', function () {
+    vi.stubEnv('MAINTENANCE_MODE', 'false');
+    expect(proxy().status).toBe(200);
+    vi.stubEnv('MAINTENANCE_MODE', '');
+    expect(proxy().status).toBe(200);
   });
 });
