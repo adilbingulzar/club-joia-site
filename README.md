@@ -37,6 +37,7 @@ Settings, in `.env.local` (or the server's environment):
 ALFRED_URL=http://localhost/alfred_master   # Alfred base URL, no trailing slash
 ALFRED_EVENT_ID=5263                        # the Club JOIA 300 event in Alfred
 ALFRED_VENDOR_ID=462967                     # the event's vendor, for the event's currency
+ALFRED_UAE_URL=https://tiqs.it              # the server holding the tickets, for the ticket email's links; read at build time
 ```
 
 Ticket names, prices, the event's currency and stock live in Alfred; names must match `tier.name + ', ' + package.name` in `lib/config.ts`.
