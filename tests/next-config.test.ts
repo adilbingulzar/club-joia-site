@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { NextRequest } from 'next/server';
 import nextConfig from '../next.config';
 import { config, proxy } from '../proxy';
 
@@ -42,17 +43,45 @@ describe('ticket email paths', function () {
 });
 
 describe('maintenance', function () {
+  const visit = function (path: string, cookie = '') {
+    return proxy(new NextRequest('https://club.example.com' + path, { headers: cookie ? { cookie } : {} }));
+  };
+
   it('shows the page while MAINTENANCE_MODE is true', async function () {
     vi.stubEnv('MAINTENANCE_MODE', 'true');
-    const response = proxy();
+    const response = visit('/tickets');
     expect(response.status).toBe(503);
     expect(await response.text()).toContain('under maintenance');
   });
 
   it('leaves the site open otherwise', function () {
     vi.stubEnv('MAINTENANCE_MODE', 'false');
-    expect(proxy().status).toBe(200);
+    expect(visit('/tickets').status).toBe(200);
     vi.stubEnv('MAINTENANCE_MODE', '');
-    expect(proxy().status).toBe(200);
+    expect(visit('/tickets').status).toBe(200);
+  });
+
+  it('opens the site for a developer with the key, without the key in the address', function () {
+    vi.stubEnv('MAINTENANCE_MODE', 'true');
+    vi.stubEnv('MAINTENANCE_KEY', 'secret');
+    const response = visit('/tickets?dev=secret');
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('https://club.example.com/tickets');
+    expect(response.cookies.get('cj300-dev')?.value).toBe('secret');
+    expect(visit('/tickets', 'cj300-dev=secret').status).toBe(200);
+  });
+
+  it('keeps the page for a wrong key or cookie', function () {
+    vi.stubEnv('MAINTENANCE_MODE', 'true');
+    vi.stubEnv('MAINTENANCE_KEY', 'secret');
+    expect(visit('/tickets?dev=wrong').status).toBe(503);
+    expect(visit('/tickets', 'cj300-dev=wrong').status).toBe(503);
+  });
+
+  it('opens for nobody without a key', function () {
+    vi.stubEnv('MAINTENANCE_MODE', 'true');
+    vi.stubEnv('MAINTENANCE_KEY', '');
+    expect(visit('/tickets?dev=').status).toBe(503);
+    expect(visit('/tickets', 'cj300-dev=').status).toBe(503);
   });
 });

@@ -39,6 +39,7 @@ ALFRED_EVENT_ID=5263                        # the Club JOIA 300 event in Alfred
 ALFRED_VENDOR_ID=462967                     # the event's vendor, for the event's currency
 ALFRED_UAE_URL=https://tiqs.it              # the server holding the tickets, for the ticket email's links; read at build time
 MAINTENANCE_MODE=true                       # optional: the site shows a maintenance page, ticket email links keep working; restart to apply
+MAINTENANCE_KEY=long-random-text            # optional: developers open the site once with ?dev=<this key> during maintenance
 ```
 
 Ticket names, prices, the event's currency and stock live in Alfred; names must match `tier.name + ', ' + package.name` in `lib/config.ts`.

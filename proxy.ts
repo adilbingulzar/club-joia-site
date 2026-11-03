@@ -1,8 +1,14 @@
 /*
  * Maintenance: while MAINTENANCE_MODE=true the site answers with the page below.
  * Remove it or set it to false and restart the site to open it again.
+ * Developers: with MAINTENANCE_KEY set, one visit to ?dev=<MAINTENANCE_KEY> opens the site for
+ * that browser. That visit stores a cookie and drops the parameter from the address.
  */
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+const PARAM = 'dev';
+const COOKIE = 'cj300-dev';
 
 const PAGE = `<!doctype html>
 <html lang="en">
@@ -27,8 +33,20 @@ h1{margin:12px 0 16px;font-size:clamp(24px,5vw,36px);font-weight:800;line-height
 </html>
 `;
 
-export function proxy() {
+export function proxy(request: NextRequest) {
   if (process.env.MAINTENANCE_MODE !== 'true') return NextResponse.next();
+
+  const key = process.env.MAINTENANCE_KEY;
+  const url = request.nextUrl;
+  if (key && url.searchParams.get(PARAM) === key) {
+    url.searchParams.delete(PARAM);
+    const res = NextResponse.redirect(url);
+    // Lax so the cookie still comes along when the payment page sends the developer back to /thank-you.
+    res.cookies.set(COOKIE, key, { httpOnly: true, secure: url.protocol === 'https:', sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 });
+    return res;
+  }
+
+  if (key && request.cookies.get(COOKIE)?.value === key) return NextResponse.next();
 
   return new NextResponse(PAGE, {
     status: 503,
