@@ -13,12 +13,12 @@ export type Buyer = {
   firstName: string; lastName: string; email: string; repeatEmail: string;
   address: string; zipcode: string; city: string; country: string; gender: string;
   day: string; month: string; year: string; phoneCode: string; phone: string;
-  gateway: string; method: string; sms: boolean; terms: boolean;
+  gateway: string; method: string; sms: boolean; over21: boolean; terms: boolean;
 };
 
 export const EMPTY_BUYER: Buyer = {
   firstName: '', lastName: '', email: '', repeatEmail: '', address: '', zipcode: '', city: '',
-  country: '', gender: '', day: '', month: '', year: '', phoneCode: '', phone: '', gateway: '', method: '', sms: false, terms: false
+  country: '', gender: '', day: '', month: '', year: '', phoneCode: '', phone: '', gateway: '', method: '', sms: false, over21: false, terms: false
 };
 
 // The gateway's payment methods (app/api/checkout/methods) for gateway + country `key`.
@@ -41,10 +41,10 @@ export function birthday(b: Buyer): string {
   return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s && d.getTime() < Date.now() ? s : '';
 }
 
-type Field = 'firstName' | 'lastName' | 'email' | 'repeatEmail' | 'address' | 'zipcode' | 'city' | 'country' | 'gender' | 'birthday' | 'phone' | 'gateway' | 'method' | 'terms';
+type Field = 'firstName' | 'lastName' | 'email' | 'repeatEmail' | 'address' | 'zipcode' | 'city' | 'country' | 'birthday' | 'phone' | 'gateway' | 'method' | 'over21' | 'terms';
 
 // In form order, so the first one is the one to scroll to.
-const FIELDS: Field[] = ['firstName', 'lastName', 'email', 'repeatEmail', 'address', 'zipcode', 'city', 'country', 'gender', 'birthday', 'phone', 'gateway', 'method', 'terms'];
+const FIELDS: Field[] = ['firstName', 'lastName', 'email', 'repeatEmail', 'address', 'zipcode', 'city', 'country', 'birthday', 'phone', 'gateway', 'method', 'over21', 'terms'];
 
 const NAME = /^[\p{L}\p{M}' .\-]+$/u;
 
@@ -67,14 +67,17 @@ export function validate(b: Buyer, methods: Method[]): Partial<Record<Field, str
   else if (!/^[A-Za-z0-9 \-]{2,20}$/.test(b.zipcode.trim())) e.zipcode = 'Please enter a valid zip code.';
   if (!b.city.trim()) e.city = 'Please enter your city.';
   if (!b.country) e.country = 'Please select your country.';
-  if (!b.gender) e.gender = 'Please select your gender.';
-  if (!b.day || !b.month || !b.year) e.birthday = 'Please select your full birthday.';
-  else if (!birthday(b)) e.birthday = 'This date doesn’t exist. Please check the day and month.';
+  // Optional, but a date that is started has to be a real one.
+  if (b.day || b.month || b.year) {
+    if (!b.day || !b.month || !b.year) e.birthday = 'Please select your full birthday.';
+    else if (!birthday(b)) e.birthday = 'This date doesn’t exist. Please check the day and month.';
+  }
   if (!b.phoneCode) e.phone = 'Please select your country code.';
   else if (!phone) e.phone = 'Please enter your phone number.';
   else if (!/^\d{6,15}$/.test(phone)) e.phone = 'Please enter a valid phone number, digits only, without the country code.';
   if (!b.gateway) e.gateway = 'Please choose a payment method.';
   else if (methods.length && !methods.some(function (m) { return m.id === b.method; })) e.method = 'Please choose how you want to pay.';
+  if (!b.over21) e.over21 = 'Please confirm that you are older than 21.';
   if (!b.terms) e.terms = 'Please agree to the terms and conditions.';
   return e;
 }
@@ -110,7 +113,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
   const key = methodsKey(buyer);
   const shownMethods = methods.key === key ? methods.list : [];
   // Also before the load has started for a new gateway or country.
-  const methodsLoading = !!key && (methods.key !== key || methods.loading);
+  const methodsLoading = cfg.payment.enabled && !!key && (methods.key !== key || methods.loading);
   const errors = validate(buyer, shownMethods);
   const smsFee = buyer.sms ? cfg.payment.smsFee : 0;
 
@@ -148,7 +151,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
 
   // The methods of the chosen gateway for the buyer's country, with its suggested one selected.
   useEffect(function () {
-    if (!key) return;
+    if (!cfg.payment.enabled || !key) return;
     let current = true;
     const [g, c] = key.split(':');
     setMethods({ key, list: [], loading: true, failed: false });
@@ -190,12 +193,12 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
 
   // The birthday and phone code selects belong to a group, their error shows after a submit
   // (or, for the code, once the phone number is left), not while the group is half filled in.
-  function select(key: 'country' | 'gender' | 'day' | 'month' | 'year' | 'phoneCode') {
-    const field: Field = key === 'phoneCode' ? 'phone' : key === 'country' || key === 'gender' ? key : 'birthday';
+  function select(key: 'country' | 'day' | 'month' | 'year' | 'phoneCode') {
+    const field: Field = key === 'phoneCode' ? 'phone' : key === 'country' ? key : 'birthday';
     return {
-      id: key, name: key, value: buyer[key], required: true, ...invalid(field),
+      id: key, name: key, value: buyer[key], required: key === 'country' || key === 'phoneCode', ...invalid(field),
       onChange: function (e: React.ChangeEvent<HTMLSelectElement>) { set(key, e.target.value); },
-      onBlur: function () { if (key === 'country' || key === 'gender') touch(key); }
+      onBlur: function () { if (key === 'country') touch(key); }
     };
   }
 
@@ -206,7 +209,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
 
   function pay(e: React.FormEvent, lines: Line[]) {
     e.preventDefault();
-    if (!lines.length || methodsLoading) return;
+    if (!cfg.payment.enabled || !lines.length || methodsLoading) return;
     setMsg('');
     setTried(true);
 
@@ -231,7 +234,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
           firstName: buyer.firstName, lastName: buyer.lastName, email: buyer.email, repeatEmail: buyer.repeatEmail,
           address: buyer.address, zipcode: buyer.zipcode, city: buyer.city, country: buyer.country,
           gender: buyer.gender, birthday: dob, phoneCode: buyer.phoneCode, phone: buyer.phone, gateway: buyer.gateway,
-          method: buyer.method, sms: buyer.sms, terms: buyer.terms
+          method: buyer.method, sms: buyer.sms, over21: buyer.over21, terms: buyer.terms
         },
         successUrl: pageUrl('/thank-you'),
         cancelUrl: pageUrl('/summary')
@@ -297,17 +300,16 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
               </select>
               {errorText('country')}
             </label>
-            <label className={error('gender') ? 'invalid' : ''}>Gender
-              <select {...select('gender')}>
+            <label>Gender (optional)
+              <select id="gender" name="gender" value={buyer.gender} onChange={function (e) { set('gender', e.target.value); }}>
                 <option value="">Select gender</option>
                 <option value="male">Male</option>
                 <option value="female">Female</option>
                 <option value="nogender">Prefer not to say</option>
               </select>
-              {errorText('gender')}
             </label>
             <fieldset className={'wide' + (error('birthday') ? ' invalid' : '')}>
-              <legend>Birthday (dd/mm/yyyy)</legend>
+              <legend>Birthday (dd/mm/yyyy, optional)</legend>
               <div className="row">
                 <select {...select('day')} aria-label="Day">
                   <option value="">dd</option>
@@ -335,7 +337,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
               </div>
               {errorText('phone')}
             </fieldset>
-            <fieldset className={'wide' + (error('gateway') ? ' invalid' : '')}>
+            {cfg.payment.enabled && <fieldset className={'wide' + (error('gateway') ? ' invalid' : '')}>
               <legend>Payment method</legend>
               <div className="gateways">
                 {cfg.payment.gateways.map(function (g) {
@@ -347,8 +349,8 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
                 })}
               </div>
               {errorText('gateway')}
-            </fieldset>
-            {key && <fieldset className={'wide' + (error('method') ? ' invalid' : '')} id="methods" tabIndex={-1} aria-busy={methodsLoading}>
+            </fieldset>}
+            {cfg.payment.enabled && key && <fieldset className={'wide' + (error('method') ? ' invalid' : '')} id="methods" tabIndex={-1} aria-busy={methodsLoading}>
               <legend>Pay with</legend>
               {methodsLoading && <div className="methods" role="status">
                 <span className="sr-only">Loading payment options…</span>
@@ -380,6 +382,10 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
             <span>Also receive tickets via SMS ({money(cfg.payment.smsFee)})</span>
           </label>
           */}
+          <label className={'check' + (error('over21') ? ' invalid' : '')}>
+            <input type="checkbox" id="over21" name="over21" required checked={buyer.over21} {...invalid('over21')} onChange={function (e) { set('over21', e.target.checked); }} />
+            <span>I am older than 21{errorText('over21')}</span>
+          </label>
           <label className={'check' + (error('terms') ? ' invalid' : '')}>
             <input type="checkbox" id="terms" name="terms" required checked={buyer.terms} {...invalid('terms')} onChange={function (e) { set('terms', e.target.checked); }} />
             <span>I agree to the <a href={termsUrl} target="_blank" rel="noopener">terms and conditions</a>.{errorText('terms')}</span>
@@ -387,7 +393,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
 
           <div className="actions">
             <Link className="btn-ghost" href="/tickets">Edit tickets</Link>
-            <button className="btn" id="pay" type="submit" disabled={busy || methodsLoading}>{busy ? 'Redirecting…' : methodsLoading ? 'Loading payment options…' : 'Proceed to payment'}</button>
+            <button className="btn" id="pay" type="submit" disabled={!cfg.payment.enabled || busy || methodsLoading}>{busy ? 'Redirecting…' : methodsLoading ? 'Loading payment options…' : 'Proceed to payment'}</button>
           </div>
           <p className="alert error" id="msg" role="alert" tabIndex={-1} ref={msgRef} hidden={!msg}>{msg}</p>
           <p className="note">

@@ -5,7 +5,7 @@ const BUYER: Buyer = {
   ...EMPTY_BUYER,
   firstName: 'Zoë', lastName: "O'Brien-Smith", email: 'Test@Example.com', repeatEmail: 'test@example.com',
   address: 'Mall Road 1', zipcode: '1012 LG', city: 'Amsterdam', country: 'NL', gender: 'female',
-  day: '29', month: '2', year: '2000', phoneCode: 'NL', phone: '6 12-34 56 78', gateway: 'paynl', method: '10', terms: true
+  day: '29', month: '2', year: '2000', phoneCode: 'NL', phone: '6 12-34 56 78', gateway: 'paynl', method: '10', over21: true, terms: true
 };
 const METHODS = [{ id: '10', name: 'iDEAL', icon: '' }, { id: '706', name: 'Credit card', icon: '' }];
 
@@ -17,7 +17,7 @@ describe('validate', function () {
   it('asks for every field of an empty form', function () {
     expect(Object.keys(validate(EMPTY_BUYER, []))).toEqual([
       'firstName', 'lastName', 'email', 'repeatEmail', 'address', 'zipcode', 'city',
-      'country', 'gender', 'birthday', 'phone', 'gateway', 'terms'
+      'country', 'phone', 'gateway', 'over21', 'terms'
     ]);
   });
 
@@ -28,10 +28,15 @@ describe('validate', function () {
     [{ zipcode: '#1' }, 'zipcode', 'Please enter a valid zip code.'],
     [{ day: '31', month: '4' }, 'birthday', 'This date doesn’t exist. Please check the day and month.'],
     [{ month: '' }, 'birthday', 'Please select your full birthday.'],
+    [{ over21: false }, 'over21', 'Please confirm that you are older than 21.'],
     [{ phoneCode: '' }, 'phone', 'Please select your country code.'],
     [{ phone: '06-abc' }, 'phone', 'Please enter a valid phone number, digits only, without the country code.']
   ])('%o: %s', function (change, field, message) {
     expect(validate({ ...BUYER, ...change }, METHODS)).toEqual({ [field]: message });
+  });
+
+  it('accepts a form without gender and birthday', function () {
+    expect(validate({ ...BUYER, gender: '', day: '', month: '', year: '' }, METHODS)).toEqual({});
   });
 
   it('asks how to pay once the gateway\'s methods are in', function () {

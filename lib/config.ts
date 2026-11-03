@@ -32,7 +32,8 @@ export type Ticket = {
 
 const packages: Package[] = [
   { id: '3-days',  name: '3 days',              dates: 'Friday, Saturday & Sunday, December 4, 5 & 6' },
-  { id: 'sat-sun', name: 'Saturday & Sunday',   dates: 'December 5 & 6' },
+  // Not on sale for now, a commercial decision:
+  // { id: 'sat-sun', name: 'Saturday & Sunday',   dates: 'December 5 & 6' },
   { id: 'fri-sun', name: 'Friday & Sunday',     dates: 'December 4 & 6' },
   { id: 'fri-sat', name: 'Friday & Saturday',   dates: 'December 4 & 5' }
 ];
@@ -122,6 +123,8 @@ export const CJ_CONFIG = {
   tickets: tickets,
 
   payment: {
+    // false: the summary page hides the payment options and disables its button.
+    enabled: false,
     /*
      * Preferred: an endpoint on your server that creates ONE checkout for the
      * whole order. The site POSTs JSON:

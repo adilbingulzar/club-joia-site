@@ -49,4 +49,9 @@ describe('tickets', function () {
     expect(ticket('ultra-black/fri-sat')!.name).toBe('Ultra Black, Friday & Saturday');
     expect(ticket('nope')).toBeNull();
   });
+
+  it('sells every access level for 3 days, Friday & Sunday and Friday & Saturday only', function () {
+    expect(cfg.packages.map(function (p) { return p.id; })).toEqual(['3-days', 'fri-sun', 'fri-sat']);
+    expect(ticket('ruby-red/sat-sun')).toBeNull();
+  });
 });

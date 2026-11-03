@@ -13,7 +13,7 @@ import { getCatalog } from '@/lib/catalog';
 type Buyer = {
   firstName: string; lastName: string; email: string; repeatEmail: string;
   address: string; zipcode: string; city: string; country: string; gender: string;
-  birthday: string; phoneCode: string; phone: string; gateway: string; method: string; sms: boolean; terms: boolean;
+  birthday: string; phoneCode: string; phone: string; gateway: string; method: string; sms: boolean; over21: boolean; terms: boolean;
 };
 
 class CheckoutError extends Error {}
@@ -35,7 +35,7 @@ function readBuyer(raw: Record<string, unknown>): Buyer {
     address: text(raw.address, 200), zipcode: text(raw.zipcode, 20), city: text(raw.city),
     country: text(raw.country, 2), gender: text(raw.gender, 10), birthday: text(raw.birthday, 10),
     phoneCode: text(raw.phoneCode, 2), phone: text(raw.phone, 20).replace(/[\s\-()]/g, ''), gateway: text(raw.gateway, 20),
-    method: text(raw.method, 10), sms: raw.sms === true, terms: raw.terms === true
+    method: text(raw.method, 10), sms: raw.sms === true, over21: raw.over21 === true, terms: raw.terms === true
   };
 
   if (!b.firstName || !b.lastName || !b.address || !b.zipcode || !b.city) throw new CheckoutError('Please fill in all fields.');
@@ -44,10 +44,11 @@ function readBuyer(raw: Record<string, unknown>): Buyer {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email)) throw new CheckoutError('Please enter a valid email address.');
   if (b.email !== b.repeatEmail) throw new CheckoutError('The email addresses don’t match.');
   if (!country(b.country)) throw new CheckoutError('Please select your country.');
-  if (['male', 'female', 'nogender'].indexOf(b.gender) < 0) throw new CheckoutError('Please select your gender.');
-  if (!validBirthday(b.birthday)) throw new CheckoutError('Please enter a valid birthday.');
+  if (b.gender && ['male', 'female', 'nogender'].indexOf(b.gender) < 0) throw new CheckoutError('Please select your gender.');
+  if (b.birthday && !validBirthday(b.birthday)) throw new CheckoutError('Please enter a valid birthday.');
   if (!country(b.phoneCode) || !/^\d{6,15}$/.test(b.phone)) throw new CheckoutError('Please enter a valid phone number.');
   if (!gateway(b.gateway)) throw new CheckoutError('Please choose a payment method.');
+  if (!b.over21) throw new CheckoutError('Please confirm that you are older than 21.');
   if (!b.terms) throw new CheckoutError('Please agree to the terms and conditions.');
   return b;
 }
@@ -119,13 +120,14 @@ export async function POST(request: Request) {
       city: buyer.city,
       // lowercase name, as Alfred's own shop sends it
       country: buyerCountry.name.toLowerCase(),
-      gender: buyer.gender,
-      age: buyer.birthday,
       countryPhoneCode: country(buyer.phoneCode)!.dial,
       phoneNumber: buyer.phone,
       paymentTypeId: await paymentTypeId(buyer.method, buyerCountry.code, engine),
       paymentEngine: engine
     };
+    // Left out when empty: Alfred's age column is a date and can't hold an empty text.
+    if (buyer.gender) form.gender = buyer.gender;
+    if (buyer.birthday) form.age = buyer.birthday;
     if (buyer.sms) form.sendTicketWithSms = 'on';
 
     body.items.slice(0, cfg.tickets.length).forEach(function (item: { id?: unknown; quantity?: unknown }, i: number) {

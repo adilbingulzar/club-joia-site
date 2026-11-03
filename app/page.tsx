@@ -114,7 +114,7 @@ export default function Home() {
           <div className="wrap" style={{ maxWidth: '820px' }}>
             <h2>Good to know</h2>
             <details><summary>How do I get access?</summary><p>Access is limited. Choose your access level, days and number on the <Link href="/tickets">access page</Link>, review your order summary, then pay securely online.</p></details>
-            <details><summary>Which days can I attend?</summary><p>Club JOIA 300 runs on December 4, 5 and 6, during the Abu Dhabi Grand Prix weekend. Every access level is available for all three days, or as a two-day package: Saturday &amp; Sunday, Friday &amp; Sunday, or Friday &amp; Saturday.</p></details>
+            <details><summary>Which days can I attend?</summary><p>Club JOIA 300 runs on December 4, 5 and 6, during the Abu Dhabi Grand Prix weekend. Every access level is available for all three days, or as a two-day package: Friday &amp; Sunday or Friday &amp; Saturday.</p></details>
             <details><summary>Who is behind the event?</summary><p>Club JOIA 300 is presented by Elixium Events.</p></details>
           </div>
         </section>

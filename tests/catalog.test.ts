@@ -55,15 +55,15 @@ describe('getCatalog', function () {
     alfredMock({
       'Api/Eventsnew/buyTicketsTicketTypes': function () {
         return cfg.tickets.map(function (t) {
-          return { id: TICKET_IDS[t.name], ticketDescription: t.name, ticketPrice: '100.00', softDelete: t.id === 'pearly-white/sat-sun' ? '1' : '0', ticketVisible: '1' };
+          return { id: TICKET_IDS[t.name], ticketDescription: t.name, ticketPrice: '100.00', softDelete: t.id === 'pearly-white/fri-sun' ? '1' : '0', ticketVisible: '1' };
         });
       }
     });
     const { getCatalog, priceText } = await catalogModule();
     const c = await getCatalog();
 
-    expect(c.tickets['pearly-white/sat-sun']).toEqual({ price: null, soldOut: true });
-    expect(priceText(c, 'pearly-white', 'sat-sun')).toBe('Not available');
+    expect(c.tickets['pearly-white/fri-sun']).toEqual({ price: null, soldOut: true });
+    expect(priceText(c, 'pearly-white', 'fri-sun')).toBe('Not available');
   });
 
   it('is unavailable, never config prices, when Alfred fails before its first answer', async function () {

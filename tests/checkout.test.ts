@@ -5,7 +5,7 @@ const BUYER = {
   firstName: 'Test', lastName: 'Buyer', email: 'Test@Example.com', repeatEmail: 'test@example.com',
   address: 'Mall Road 1', zipcode: '54000', city: 'Lahore', country: 'PK', gender: 'male',
   birthday: '1990-01-01', phoneCode: 'PK', phone: '300 123-4567', gateway: 'multisafepay', method: '706',
-  sms: false, terms: true
+  sms: false, over21: true, terms: true
 };
 
 // app/api/checkout uses lib/catalog, which keeps its answer: a fresh copy for every test
@@ -37,14 +37,24 @@ describe('checkout', function () {
     });
   });
 
+  it('sends no gender or birthday when they are left empty', async function () {
+    const alfred = alfredMock();
+    const { status } = await checkout({ gender: '', birthday: '' });
+    const sent = alfred.sent('Api/Eventsnew/buyTickets')!;
+
+    expect(status).toBe(200);
+    expect(sent.has('gender')).toBe(false);
+    expect(sent.has('age')).toBe(false);
+  });
+
   it('sends several tickets and the SMS option', async function () {
     const alfred = alfredMock();
-    await checkout({ sms: true }, [{ id: 'ruby-red/3-days', quantity: 1 }, { id: 'ultra-black/sat-sun', quantity: 3 }]);
+    await checkout({ sms: true }, [{ id: 'ruby-red/3-days', quantity: 1 }, { id: 'ultra-black/fri-sun', quantity: 3 }]);
     const sent = alfred.sent('Api/Eventsnew/buyTickets')!;
 
     expect(sent.get('sendTicketWithSms')).toBe('on');
     expect(sent.get('tickets[0][ticketId]')).toBe(TICKET_IDS['Ruby Red, 3 days']);
-    expect(sent.get('tickets[1][ticketId]')).toBe(TICKET_IDS['Ultra Black, Saturday & Sunday']);
+    expect(sent.get('tickets[1][ticketId]')).toBe(TICKET_IDS['Ultra Black, Friday & Sunday']);
     expect(sent.get('tickets[1][quantity]')).toBe('3');
   });
 
@@ -72,6 +82,7 @@ describe('checkout', function () {
     [{ birthday: '1990-02-31' }, 'Please enter a valid birthday.'],
     [{ phone: '12' }, 'Please enter a valid phone number.'],
     [{ gateway: 'stripe' }, 'Please choose a payment method.'],
+    [{ over21: false }, 'Please confirm that you are older than 21.'],
     [{ terms: false }, 'Please agree to the terms and conditions.']
   ])('refuses %o: %s', async function (buyer, error) {
     const alfred = alfredMock();
@@ -82,6 +93,7 @@ describe('checkout', function () {
   it.each([
     [[], 'Your order is empty.'],
     [[{ id: 'gold/3-days', quantity: 1 }], 'Your order has a ticket that isn’t available. Please review your tickets.'],
+    [[{ id: 'ruby-red/sat-sun', quantity: 1 }], 'Your order has a ticket that isn’t available. Please review your tickets.'],
     [[{ id: 'ruby-red/3-days', quantity: 11 }], 'Your order has a ticket that isn’t available. Please review your tickets.'],
     [[{ id: 'ruby-red/3-days', quantity: 1.5 }], 'Your order has a ticket that isn’t available. Please review your tickets.']
   ])('refuses the items %j', async function (items, error) {

@@ -14,9 +14,10 @@ a{color:inherit}
 .hero::before{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(90deg,rgba(5,5,5,.88) 0,rgba(5,5,5,.6) 38%,rgba(5,5,5,.1) 70%)}
 .hero::after{content:"";position:absolute;inset:auto 0 0 0;height:30%;background:linear-gradient(transparent,var(--ink))}
 nav{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:28px 0}
-.logo{display:block;line-height:0}.logo img{height:clamp(42px,5vw,60px);width:auto}.flogo{height:56px;width:auto;margin:0 auto 36px;display:block}
+.logo{display:block;line-height:0}.logo img{height:clamp(42px,5vw,60px);width:auto}.flogo{height:auto;max-height:56px;width:auto;max-width:100%;margin:0 auto 36px;display:block}
 .nav-cta{font-size:15px;font-weight:500;text-decoration:none;border:1px solid var(--gold);padding:10px 20px;border-radius:99px;transition:background .2s,color .2s}
 .nav-cta:hover{background:var(--gold);color:var(--ink)}
+.hero .nav-cta:not(:hover){background:rgba(5,5,5,.5)}
 .hero-body{position:relative;z-index:2;flex:1;display:flex;align-items:center}
 h1{font-family:var(--disp);font-weight:800;font-size:clamp(22px,3vw,40px);line-height:1.25;letter-spacing:0;margin:0 0 28px;max-width:17em;text-wrap:balance}
 .when{font-size:clamp(14px,1.4vw,17px);font-weight:400;margin:0 0 36px;padding-top:20px;border-top:1px solid var(--line);display:inline-block}
@@ -97,6 +98,7 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px}
  .strip{flex-wrap:wrap;row-gap:16px}
  .strip>div{padding:0 14px}
  .nav-cta{padding:9px 16px}
+ .hero-foot{padding-top:24px}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.more svg{animation:none}.btn{transition:none}}
 
@@ -210,7 +212,7 @@ button.btn{border:0;cursor:pointer;font-family:inherit}
 .lines{width:100%;border-collapse:collapse;margin-bottom:8px}
 .lines th{text-align:left;font-weight:400;font-size:13px;color:var(--mute);letter-spacing:.08em;text-transform:uppercase;padding:0 0 12px;border-bottom:1px solid var(--line)}
 .lines td{padding:20px 0;border-bottom:1px solid var(--line);vertical-align:middle}
-.lines .num{text-align:right;white-space:nowrap}
+.lines .num{text-align:right;white-space:nowrap;padding-left:12px}
 .lines td.item{display:flex;align-items:center;gap:12px;font-weight:500}
 .lines td small{display:block;color:var(--mute);font-weight:300;font-size:13px}
 .totals{margin:0 0 36px}
@@ -241,7 +243,7 @@ button.btn{border:0;cursor:pointer;font-family:inherit}
  .tier-block-head h2{font-size:16px;gap:8px;margin:0 0 2px}
  .tier-block-head .sw{width:11px;height:11px}
  .tier-block-head p{display:none}
- .tier-block-head .link{font-size:13px}
+ .tier-block-head .link{font-size:13px;display:inline-block;padding:4px 0}
  .order-now{margin-top:10px;padding:9px 16px;font-size:13px}
  .opt{grid-template-columns:1fr auto;grid-template-areas:"pkg qty" "price qty";gap:0 12px;padding:10px 0}
  .opt>div:first-child{grid-area:pkg}
@@ -253,8 +255,7 @@ button.btn{border:0;cursor:pointer;font-family:inherit}
  .opt .stepper output{min-width:26px;font-size:15px}
  .tier-hero,.split{grid-template-columns:1fr}
  .tier-hero{padding-top:32px}
- .others,.access-cards{grid-template-columns:1fr}
- .access-cards{max-width:420px}
+ .others{grid-template-columns:1fr}
 }
 @media(max-width:480px){.perks{columns:1}.tier-link img{width:96px}
  .logo img{height:28px}
@@ -312,7 +313,7 @@ button.btn{border:0;cursor:pointer;font-family:inherit}
 .buyer .invalid input:not([type=checkbox]):not([type=radio]),.buyer .invalid select,.buyer .invalid .gateway,.buyer .invalid .method{border-color:var(--err)}
 .buyer .invalid input[type=checkbox]{outline:2px solid var(--err);outline-offset:2px}
 .buyer .field-error{display:block;margin-top:6px;color:var(--err);font-size:13px;font-weight:500;letter-spacing:0;text-transform:none}
-.legal section{max-width:760px;margin:0 0 28px}
+.legal section{max-width:760px;margin:0 0 28px;padding:0}
 .legal h2{font-family:var(--disp);font-weight:600;font-size:clamp(17px,2vw,21px);margin:0 0 10px}
 .legal p,.legal li{color:#dfe1e5;font-size:16px;margin:0 0 10px}
 .legal ul{margin:0;padding-left:20px}
@@ -325,4 +326,14 @@ button.btn{border:0;cursor:pointer;font-family:inherit}
 @keyframes loader-in{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion:reduce){.loader-ring{animation-duration:2.4s}.page-loader{animation:none}}
 .order-id{margin-top:14px!important;color:#dfe1e5!important}
+@media(max-width:560px){.access-cards{grid-template-columns:1fr;max-width:420px}}
+@media(max-width:360px){
+ .wrap{padding-left:16px;padding-right:16px}
+ .logo img{height:24px}
+ .buyer .row{gap:6px}
+ .buyer .row select{padding-left:10px;padding-right:26px;background-position:right 8px center}
+ .nav-cta{padding:7px 12px;font-size:13px}
+ .lines .num{padding-left:8px}
+ .lines td small{font-size:12px}
+}
 @media (max-width:640px){.buyer .fields,.buyer .gateways{grid-template-columns:1fr}.buyer .methods{grid-template-columns:1fr 1fr}.buyer .row{grid-template-columns:1fr 1.4fr 1fr}}
