@@ -33,5 +33,5 @@ export function proxy(request: NextRequest) {
 export const config = {
   // Static build files can't reveal anything on their own and ticket emails must keep working (next.config.ts);
   // everything else, API included, is gated.
-  matcher: ['/((?!_next/static|_next/image|booking_events/pdf/|Ajaxdorian/getQrcodeImage/|uploads/qrcodes/|assets/(?!img/)|ticketing/download).*)']
+  matcher: ['/((?!_next/static|_next/image|booking_events/pdf/|Ajaxdorian/getQrcodeImage/|uploads/qrcodes/|assets/(?!img/)|ticketing/download|downloadticketpdf/).*)']
 };

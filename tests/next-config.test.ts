@@ -30,6 +30,7 @@ describe('ticket email paths', function () {
     expect(gated('/uploads/qrcodes/T-1.png')).toBe(false);
     expect(gated('/assets/images/events/a.png')).toBe(false);
     expect(gated('/ticketing/download')).toBe(false);
+    expect(gated('/downloadticketpdf/G-1')).toBe(false);
   });
 
   it('leave the site itself behind the private preview', function () {

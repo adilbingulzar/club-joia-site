@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
   async rewrites() {
     const server = (process.env.ALFRED_UAE_URL || '').replace(/\/+$/, '');
     if (!server) return [];
-    return ['/booking_events/pdf/:path', '/Ajaxdorian/getQrcodeImage/:path', '/uploads/qrcodes/:path', '/assets/:path*', '/ticketing/download'].map(function (source) {
+    return ['/booking_events/pdf/:path', '/Ajaxdorian/getQrcodeImage/:path', '/uploads/qrcodes/:path', '/assets/:path*', '/ticketing/download', '/downloadticketpdf/:path'].map(function (source) {
       return { source, destination: server + source };
     });
   }
