@@ -5,6 +5,7 @@ import { useCart, useHydrated, type Line } from '@/lib/cart';
 import { CJ_CONFIG as cfg, gatewayFor } from '@/lib/config';
 import { useCatalog } from '@/lib/prices';
 import { countries, country } from '@/lib/countries';
+import { isOver21, UNDER_21 } from '@/lib/age';
 
 function pageUrl(path: string) { return new URL(path, location.href).href; }
 
@@ -53,6 +54,8 @@ export function validate(b: Buyer, methods: Method[]): Partial<Record<Field, str
   const e: Partial<Record<Field, string>> = {};
   const email = b.email.trim().toLowerCase();
   const phone = b.phone.replace(/[\s\-()]/g, '');
+  const dob = birthday(b);
+  const under21 = !!dob && !isOver21(dob);
 
   if (!b.firstName.trim()) e.firstName = 'Please enter your first name.';
   else if (!NAME.test(b.firstName.trim())) e.firstName = 'Please use letters only.';
@@ -70,14 +73,15 @@ export function validate(b: Buyer, methods: Method[]): Partial<Record<Field, str
   // Optional, but a date that is started has to be a real one.
   if (b.day || b.month || b.year) {
     if (!b.day || !b.month || !b.year) e.birthday = 'Please select your full birthday.';
-    else if (!birthday(b)) e.birthday = 'This date doesn’t exist. Please check the day and month.';
+    else if (!dob) e.birthday = 'This date doesn’t exist. Please check the day and month.';
+    else if (under21) e.birthday = UNDER_21;
   }
   if (!b.phoneCode) e.phone = 'Please select your country code.';
   else if (!phone) e.phone = 'Please enter your phone number.';
   else if (!/^\d{6,15}$/.test(phone)) e.phone = 'Please enter a valid phone number, digits only, without the country code.';
   if (!b.gateway) e.gateway = 'Please choose a payment method.';
   else if (methods.length && !methods.some(function (m) { return m.id === b.method; })) e.method = 'Please choose how you want to pay.';
-  if (!b.over21) e.over21 = 'Please confirm that you are older than 21.';
+  if (!b.over21 && !under21) e.over21 = 'Please confirm that you are older than 21.';
   if (!b.terms) e.terms = 'Please agree to the terms and conditions.';
   return e;
 }
@@ -116,9 +120,11 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
   const methodsLoading = cfg.payment.enabled && !!key && (methods.key !== key || methods.loading);
   const errors = validate(buyer, shownMethods);
   const smsFee = buyer.sms ? cfg.payment.smsFee : 0;
+  const dob = birthday(buyer);
+  const birthdayFilled = !!(buyer.day && buyer.month && buyer.year);
 
   function error(f: Field): string {
-    return tried || touched[f] ? errors[f] || '' : '';
+    return tried || touched[f] || (f === 'birthday' && birthdayFilled) ? errors[f] || '' : '';
   }
 
   function touch(f: Field) {
@@ -178,6 +184,12 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
       if (key === 'country') next.gateway = value ? gatewayFor(value as string) : '';
       // The method list is the gateway's, it is loaded again.
       if (key === 'country' || key === 'gateway') next.method = '';
+      // A full birthday decides the age checkbox. When it is taken away again, the buyer confirms.
+      if (key === 'day' || key === 'month' || key === 'year') {
+        const date = birthday(next);
+        if (date) next.over21 = isOver21(date);
+        else if (birthday(b)) next.over21 = false;
+      }
       return next;
     });
   }
@@ -222,7 +234,6 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
       }
       return;
     }
-    const dob = birthday(buyer);
 
     setBusy(true);
     fetch(cfg.payment.checkoutEndpoint, {
@@ -289,17 +300,18 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
             <label className={error('firstName') ? 'invalid' : ''}>First name<input {...input('firstName')} autoComplete="given-name" />{errorText('firstName')}</label>
             <label className={error('lastName') ? 'invalid' : ''}>Last name<input {...input('lastName')} autoComplete="family-name" />{errorText('lastName')}</label>
             <label className={error('email') ? 'invalid' : ''}>Email<input {...input('email', 150)} type="email" autoComplete="email" />{errorText('email')}</label>
-            <label className={error('repeatEmail') ? 'invalid' : ''}>Repeat email<input {...input('repeatEmail', 150)} type="email" autoComplete="off" />{errorText('repeatEmail')}</label>
+            <label className={error('repeatEmail') ? 'invalid' : ''}>Confirm email<input {...input('repeatEmail', 150)} type="email" autoComplete="off" />{errorText('repeatEmail')}</label>
             <label className={'wide' + (error('address') ? ' invalid' : '')}>Address<input {...input('address', 200)} autoComplete="street-address" />{errorText('address')}</label>
             <label className={error('zipcode') ? 'invalid' : ''}>Zip code<input {...input('zipcode', 20)} autoComplete="postal-code" />{errorText('zipcode')}</label>
             <label className={error('city') ? 'invalid' : ''}>City<input {...input('city')} autoComplete="address-level2" />{errorText('city')}</label>
-            <label className={error('country') ? 'invalid' : ''}>Country
+            <label className={'wide' + (error('country') ? ' invalid' : '')}>Country
               <select {...select('country')} autoComplete="country">
                 <option value="">Select country</option>
                 {countries.map(function (c) { return <option key={c.code} value={c.code}>{c.name}</option>; })}
               </select>
               {errorText('country')}
             </label>
+            {/* Hidden for now: gender
             <label>Gender (optional)
               <select id="gender" name="gender" value={buyer.gender} onChange={function (e) { set('gender', e.target.value); }}>
                 <option value="">Select gender</option>
@@ -308,6 +320,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
                 <option value="nogender">Prefer not to say</option>
               </select>
             </label>
+            */}
             <fieldset className={'wide' + (error('birthday') ? ' invalid' : '')}>
               <legend>Birthday (dd/mm/yyyy, optional)</legend>
               <div className="row">
@@ -383,7 +396,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
           </label>
           */}
           <label className={'check' + (error('over21') ? ' invalid' : '')}>
-            <input type="checkbox" id="over21" name="over21" required checked={buyer.over21} {...invalid('over21')} onChange={function (e) { set('over21', e.target.checked); }} />
+            <input type="checkbox" id="over21" name="over21" required checked={buyer.over21} disabled={!!dob} {...invalid('over21')} onChange={function (e) { set('over21', e.target.checked); }} />
             <span>I am older than 21{errorText('over21')}</span>
           </label>
           <label className={'check' + (error('terms') ? ' invalid' : '')}>

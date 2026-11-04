@@ -80,6 +80,7 @@ describe('checkout', function () {
     [{ country: 'XX' }, 'Please select your country.'],
     [{ gender: 'robot' }, 'Please select your gender.'],
     [{ birthday: '1990-02-31' }, 'Please enter a valid birthday.'],
+    [{ birthday: String(new Date().getFullYear() - 18) + '-01-01' }, 'You must be older than 21 to buy tickets.'],
     [{ phone: '12' }, 'Please enter a valid phone number.'],
     [{ gateway: 'stripe' }, 'Please choose a payment method.'],
     [{ over21: false }, 'Please confirm that you are older than 21.'],

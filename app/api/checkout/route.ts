@@ -9,6 +9,7 @@ import { CJ_CONFIG as cfg, gateway, ticket } from '@/lib/config';
 import { country } from '@/lib/countries';
 import { ALFRED_URL, EVENT_ID, alfred, paymentMethods, suggestedMethod } from '@/lib/alfred';
 import { getCatalog } from '@/lib/catalog';
+import { isOver21, UNDER_21 } from '@/lib/age';
 
 type Buyer = {
   firstName: string; lastName: string; email: string; repeatEmail: string;
@@ -46,6 +47,7 @@ function readBuyer(raw: Record<string, unknown>): Buyer {
   if (!country(b.country)) throw new CheckoutError('Please select your country.');
   if (b.gender && ['male', 'female', 'nogender'].indexOf(b.gender) < 0) throw new CheckoutError('Please select your gender.');
   if (b.birthday && !validBirthday(b.birthday)) throw new CheckoutError('Please enter a valid birthday.');
+  if (b.birthday && !isOver21(b.birthday)) throw new CheckoutError(UNDER_21);
   if (!country(b.phoneCode) || !/^\d{6,15}$/.test(b.phone)) throw new CheckoutError('Please enter a valid phone number.');
   if (!gateway(b.gateway)) throw new CheckoutError('Please choose a payment method.');
   if (!b.over21) throw new CheckoutError('Please confirm that you are older than 21.');

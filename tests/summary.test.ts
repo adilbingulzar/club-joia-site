@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { birthday, EMPTY_BUYER, validate, type Buyer } from '@/components/Summary';
+import { isOver21 } from '@/lib/age';
 
 const BUYER: Buyer = {
   ...EMPTY_BUYER,
@@ -35,6 +36,13 @@ describe('validate', function () {
     expect(validate({ ...BUYER, ...change }, METHODS)).toEqual({ [field]: message });
   });
 
+  it('refuses a birthday under 21, with or without the age checkbox', function () {
+    const year = String(new Date().getFullYear() - 18);
+    const expected = { birthday: 'You must be older than 21 to buy tickets.' };
+    expect(validate({ ...BUYER, day: '1', month: '1', year, over21: true }, METHODS)).toEqual(expected);
+    expect(validate({ ...BUYER, day: '1', month: '1', year, over21: false }, METHODS)).toEqual(expected);
+  });
+
   it('accepts a form without gender and birthday', function () {
     expect(validate({ ...BUYER, gender: '', day: '', month: '', year: '' }, METHODS)).toEqual({});
   });
@@ -44,6 +52,16 @@ describe('validate', function () {
     expect(validate({ ...BUYER, method: '138' }, METHODS)).toEqual({ method: 'Please choose how you want to pay.' });
     // still loading (or failed): the order goes with the suggested method
     expect(validate({ ...BUYER, method: '' }, [])).toEqual({});
+  });
+});
+
+describe('isOver21', function () {
+  const now = new Date('2026-11-04T12:00:00Z');
+
+  it('is true from the 21st birthday', function () {
+    expect(isOver21('2005-11-03', now)).toBe(true);
+    expect(isOver21('2005-11-04', now)).toBe(true);
+    expect(isOver21('2005-11-05', now)).toBe(false);
   });
 });
 
