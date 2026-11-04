@@ -124,7 +124,7 @@ export const CJ_CONFIG = {
 
   payment: {
     // false: the summary page disables its payment button.
-    enabled: false,
+    enabled: true,
     /*
      * Preferred: an endpoint on your server that creates ONE checkout for the
      * whole order. The site POSTs JSON:
