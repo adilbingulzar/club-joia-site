@@ -12,22 +12,6 @@ type Page = { status: number; location?: string };
 export const TICKET_IDS: Record<string, string> = {};
 cfg.tickets.forEach(function (t, i) { TICKET_IDS[t.name] = String(21525 + i); });
 
-export const METHODS: Record<string, { paymentTypeId: string; paymentMethod: string; paymentMethodIcon: string }[]> = {
-  noon: [{ paymentTypeId: '706', paymentMethod: 'credit card payment', paymentMethodIcon: 'http://alfred.test/creditcard.png' }],
-  'multisafe pay': [
-    { paymentTypeId: '10', paymentMethod: 'ideal payment', paymentMethodIcon: 'http://alfred.test/ideal.png' },
-    { paymentTypeId: '706', paymentMethod: 'credit card payment', paymentMethodIcon: 'http://alfred.test/creditcard.png' },
-    { paymentTypeId: '436', paymentMethod: 'bancontact payment', paymentMethodIcon: 'http://alfred.test/bancontact.png' }
-  ],
-  paynl: [
-    { paymentTypeId: '10', paymentMethod: 'ideal payment', paymentMethodIcon: 'http://alfred.test/ideal.png' },
-    { paymentTypeId: '706', paymentMethod: 'credit card payment', paymentMethodIcon: 'http://alfred.test/creditcard.png' },
-    { paymentTypeId: '436', paymentMethod: 'bancontact payment', paymentMethodIcon: 'http://alfred.test/bancontact.png' },
-    { paymentTypeId: '559', paymentMethod: 'my bank', paymentMethodIcon: '' },
-    { paymentTypeId: '138', paymentMethod: 'PayPal', paymentMethodIcon: 'https://static.pay.nl/21.png' }
-  ]
-};
-
 export const PAYMENT_URL = 'http://alfred.test/booking/onlinepayment/706/0?order=KEY';
 
 export function alfredMock(answers: Record<string, Answer | null> = {}, pages: Record<string, Page> = {}) {
@@ -40,9 +24,6 @@ export function alfredMock(answers: Record<string, Answer | null> = {}, pages: R
     },
     'Api/Eventsnew/buyTicketsEvents': function () { return [{ id: '5263', eventCurrency: 'aed' }]; },
     'Api/Eventsnew/buyTicketsSoldOut': function () { return { left_tickets: 100 }; },
-    'Api/Eventsnew/buyTicketsPaymentMethods': function (d) {
-      return { status: '1', paymentMethods: METHODS[d.get('paymentEngine') || ''] || [] };
-    },
     'Api/Eventsnew/buyTickets': function () { return { status: '1', paymentUrl: PAYMENT_URL }; },
     ...answers
   };

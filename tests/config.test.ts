@@ -1,35 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CJ_CONFIG as cfg, gateway, gatewayFor, money, ticket } from '@/lib/config';
-
-describe('gatewayFor', function () {
-  it('suggests noon in the United Arab Emirates', function () {
-    expect(gatewayFor('AE')).toBe('noon');
-  });
-
-  it('suggests Pay.nl in the Netherlands and Belgium', function () {
-    expect(gatewayFor('NL')).toBe('paynl');
-    expect(gatewayFor('BE')).toBe('paynl');
-  });
-
-  it('suggests MultiSafepay everywhere else', function () {
-    expect(gatewayFor('PK')).toBe('multisafepay');
-    expect(gatewayFor('US')).toBe('multisafepay');
-    expect(gatewayFor('')).toBe('multisafepay');
-  });
-});
-
-describe('gateway', function () {
-  it('gives the engine as Alfred names it', function () {
-    expect(gateway('noon')!.engine).toBe('noon');
-    expect(gateway('multisafepay')!.engine).toBe('multisafe pay');
-    expect(gateway('paynl')!.engine).toBe('paynl');
-  });
-
-  it('knows no other gateway', function () {
-    expect(gateway('stripe')).toBeNull();
-    expect(gateway('')).toBeNull();
-  });
-});
+import { CJ_CONFIG as cfg, money, ticket } from '@/lib/config';
 
 describe('money', function () {
   it('writes the currency and the amount with thousands separators', function () {

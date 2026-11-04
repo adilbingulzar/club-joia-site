@@ -4,7 +4,7 @@ import { alfredMock, PAYMENT_URL, TICKET_IDS } from './alfred-mock';
 const BUYER = {
   firstName: 'Test', lastName: 'Buyer', email: 'Test@Example.com', repeatEmail: 'test@example.com',
   address: 'Mall Road 1', zipcode: '54000', city: 'Lahore', country: 'PK', gender: 'male',
-  birthday: '1990-01-01', phoneCode: 'PK', phone: '300 123-4567', gateway: 'multisafepay', method: '706',
+  birthday: '1990-01-01', phoneCode: 'PK', phone: '300 123-4567',
   sms: false, over21: true, terms: true
 };
 
@@ -32,7 +32,6 @@ describe('checkout', function () {
       name: 'Test', surname: 'Buyer', email: 'test@example.com',
       address: 'Mall Road 1', zipcode: '54000', city: 'Lahore', country: 'pakistan',
       gender: 'male', age: '1990-01-01', countryPhoneCode: '92', phoneNumber: '3001234567',
-      paymentTypeId: '706', paymentEngine: 'multisafe pay',
       'tickets[0][ticketId]': TICKET_IDS['Ruby Red, Friday & Saturday'], 'tickets[0][quantity]': '2'
     });
   });
@@ -58,17 +57,25 @@ describe('checkout', function () {
     expect(sent.get('tickets[1][quantity]')).toBe('3');
   });
 
-  it('uses the suggested method when the buyer chose none', async function () {
+  it('leaves the gateway and method to Alfred, whatever the browser sends', async function () {
     const alfred = alfredMock();
-    await checkout({ country: 'NL', phoneCode: 'NL', gateway: 'paynl', method: '' });
-    expect(alfred.sent('Api/Eventsnew/buyTickets')!.get('paymentTypeId')).toBe('10');
+    await checkout({ country: 'AE', phoneCode: 'NL', gateway: 'paynl', method: '138' });
+    const sent = alfred.sent('Api/Eventsnew/buyTickets')!;
+    expect(sent.get('country')).toBe('united arab emirates');
+    expect(sent.has('paymentEngine')).toBe(false);
+    expect(sent.has('paymentTypeId')).toBe(false);
   });
 
-  it('refuses a method the gateway does not offer', async function () {
+  // Alfred's table in config/custom.php goes by these names
+  it.each([
+    ['AE', 'united arab emirates'], ['SA', 'saudi arabia'], ['EG', 'egypt'], ['KW', 'kuwait'], ['OM', 'oman'],
+    ['JO', 'jordan'], ['LB', 'lebanon'], ['BH', 'bahrain'], ['QA', 'qatar'],
+    ['NL', 'netherlands'], ['BE', 'belgium'], ['AT', 'austria'], ['PL', 'poland'], ['FI', 'finland'], ['DK', 'denmark'],
+    ['SE', 'sweden'], ['NO', 'norway'], ['CH', 'switzerland'], ['ES', 'spain'], ['IT', 'italy'], ['PT', 'portugal']
+  ])('sends %s as %s', async function (code, name) {
     const alfred = alfredMock();
-    const res = await checkout({ gateway: 'noon', method: '138' });
-    expect(res).toEqual({ status: 400, body: { error: 'Please choose how you want to pay.' } });
-    expect(alfred.count('Api/Eventsnew/buyTickets')).toBe(0);
+    await checkout({ country: code });
+    expect(alfred.sent('Api/Eventsnew/buyTickets')!.get('country')).toBe(name);
   });
 
   it.each([
@@ -82,7 +89,6 @@ describe('checkout', function () {
     [{ birthday: '1990-02-31' }, 'Please enter a valid birthday.'],
     [{ birthday: String(new Date().getFullYear() - 18) + '-01-01' }, 'You must be older than 21 to buy tickets.'],
     [{ phone: '12' }, 'Please enter a valid phone number.'],
-    [{ gateway: 'stripe' }, 'Please choose a payment method.'],
     [{ over21: false }, 'Please confirm that you are older than 21.'],
     [{ terms: false }, 'Please agree to the terms and conditions.']
   ])('refuses %o: %s', async function (buyer, error) {
@@ -125,7 +131,7 @@ describe('checkout', function () {
       [PAYMENT_URL]: { status: 302, location: '/noon_payment/KEY' },
       'http://alfred.test/noon_payment/KEY': { status: 302, location: 'https://pay.noonpayments.com/en/default/index?info=x' }
     });
-    const res = await checkout({ country: 'AE', phoneCode: 'AE', phone: '501234567', gateway: 'noon' });
+    const res = await checkout({ country: 'AE', phoneCode: 'AE', phone: '501234567' });
     expect(res.body).toEqual({ url: 'https://pay.noonpayments.com/en/default/index?info=x' });
   });
 
@@ -135,7 +141,7 @@ describe('checkout', function () {
       [uae]: { status: 302, location: 'http://uae.test/noon_payment/KEY' },
       'http://uae.test/noon_payment/KEY': { status: 302, location: 'https://pay.noonpayments.com/en/default/index?info=x' }
     });
-    const res = await checkout({ country: 'AE', phoneCode: 'AE', phone: '501234567', gateway: 'noon' });
+    const res = await checkout({ country: 'AE', phoneCode: 'AE', phone: '501234567' });
     expect(res.body).toEqual({ url: 'https://pay.noonpayments.com/en/default/index?info=x' });
   });
 
@@ -152,7 +158,7 @@ describe('checkout', function () {
     const res = await checkout();
     expect(res).toEqual({
       status: 400,
-      body: { error: 'MultiSafepay isn’t available for your order right now. You have not been charged. Please choose another payment method or try again later.' }
+      body: { error: 'Payment isn’t available for your order right now. You have not been charged. Please try again later.' }
     });
   });
 

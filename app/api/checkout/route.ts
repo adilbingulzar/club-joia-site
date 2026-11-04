@@ -1,20 +1,20 @@
 /*
  * Books the order in Alfred and returns the payment provider's page: { url }.
- * The buyer picks the gateway (noon, MultiSafepay or Pay.nl, see payment.gateways in lib/config)
- * and after payment Alfred sends the buyer to the event's success landing page (/thank-you).
- * The buyer also picks how to pay on the gateway (credit card, iDEAL, ..., see ./methods).
+ * Alfred decides the gateway (noon, MultiSafepay or Pay.nl) and how to pay on it from the buyer's
+ * country, the buyer doesn't choose: see ticketPaymentEngineByCountry in Alfred's config/custom.php.
+ * After payment Alfred sends the buyer to the event's success landing page (/thank-you).
  */
 import { NextResponse } from 'next/server';
-import { CJ_CONFIG as cfg, gateway, ticket } from '@/lib/config';
+import { CJ_CONFIG as cfg, ticket } from '@/lib/config';
 import { country } from '@/lib/countries';
-import { ALFRED_URL, EVENT_ID, alfred, paymentMethods, suggestedMethod } from '@/lib/alfred';
+import { ALFRED_URL, EVENT_ID, alfred } from '@/lib/alfred';
 import { getCatalog } from '@/lib/catalog';
 import { isOver21, UNDER_21 } from '@/lib/age';
 
 type Buyer = {
   firstName: string; lastName: string; email: string; repeatEmail: string;
   address: string; zipcode: string; city: string; country: string; gender: string;
-  birthday: string; phoneCode: string; phone: string; gateway: string; method: string; sms: boolean; over21: boolean; terms: boolean;
+  birthday: string; phoneCode: string; phone: string; sms: boolean; over21: boolean; terms: boolean;
 };
 
 class CheckoutError extends Error {}
@@ -35,8 +35,8 @@ function readBuyer(raw: Record<string, unknown>): Buyer {
     email: text(raw.email, 150).toLowerCase(), repeatEmail: text(raw.repeatEmail, 150).toLowerCase(),
     address: text(raw.address, 200), zipcode: text(raw.zipcode, 20), city: text(raw.city),
     country: text(raw.country, 2), gender: text(raw.gender, 10), birthday: text(raw.birthday, 10),
-    phoneCode: text(raw.phoneCode, 2), phone: text(raw.phone, 20).replace(/[\s\-()]/g, ''), gateway: text(raw.gateway, 20),
-    method: text(raw.method, 10), sms: raw.sms === true, over21: raw.over21 === true, terms: raw.terms === true
+    phoneCode: text(raw.phoneCode, 2), phone: text(raw.phone, 20).replace(/[\s\-()]/g, ''),
+    sms: raw.sms === true, over21: raw.over21 === true, terms: raw.terms === true
   };
 
   if (!b.firstName || !b.lastName || !b.address || !b.zipcode || !b.city) throw new CheckoutError('Please fill in all fields.');
@@ -49,7 +49,6 @@ function readBuyer(raw: Record<string, unknown>): Buyer {
   if (b.birthday && !validBirthday(b.birthday)) throw new CheckoutError('Please enter a valid birthday.');
   if (b.birthday && !isOver21(b.birthday)) throw new CheckoutError(UNDER_21);
   if (!country(b.phoneCode) || !/^\d{6,15}$/.test(b.phone)) throw new CheckoutError('Please enter a valid phone number.');
-  if (!gateway(b.gateway)) throw new CheckoutError('Please choose a payment method.');
   if (!b.over21) throw new CheckoutError('Please confirm that you are older than 21.');
   if (!b.terms) throw new CheckoutError('Please agree to the terms and conditions.');
   return b;
@@ -65,15 +64,6 @@ async function alfredTicketIds(): Promise<Record<string, string>> {
     });
   }
   return ids;
-}
-
-// The buyer's method when the gateway offers it, else the suggested one (no method chosen yet).
-async function paymentTypeId(chosen: string, countryCode: string, engine: string): Promise<string> {
-  const methods = await paymentMethods(engine);
-  if (!methods.length) throw new Error('Alfred has no payment method on ' + engine);
-  if (!chosen) return suggestedMethod(methods, countryCode, engine);
-  if (!methods.some(function (m) { return m.id === chosen; })) throw new CheckoutError('Please choose how you want to pay.');
-  return chosen;
 }
 
 // Follows Alfred's payment link to the provider's payment page, so a payment that can't be
@@ -108,7 +98,6 @@ export async function POST(request: Request) {
 
     const buyer = readBuyer(body.buyer);
     const buyerCountry = country(buyer.country)!;
-    const engine = gateway(buyer.gateway)!.engine;
     const catalog = await getCatalog();
     if (!catalog.live) throw new CheckoutError('Ticket prices can’t be loaded right now. You have not been charged. Please try again in a moment.');
     const ids = await alfredTicketIds();
@@ -120,12 +109,10 @@ export async function POST(request: Request) {
       address: buyer.address,
       zipcode: buyer.zipcode,
       city: buyer.city,
-      // lowercase name, as Alfred's own shop sends it
+      // lowercase name, as Alfred's own shop sends it. Alfred's payment gateway table goes by it.
       country: buyerCountry.name.toLowerCase(),
       countryPhoneCode: country(buyer.phoneCode)!.dial,
-      phoneNumber: buyer.phone,
-      paymentTypeId: await paymentTypeId(buyer.method, buyerCountry.code, engine),
-      paymentEngine: engine
+      phoneNumber: buyer.phone
     };
     // Left out when empty: Alfred's age column is a date and can't hold an empty text.
     if (buyer.gender) form.gender = buyer.gender;
@@ -147,8 +134,8 @@ export async function POST(request: Request) {
     if (res && res.status === '1' && res.paymentUrl) {
       const page = await paymentPage(String(res.paymentUrl));
       if (page) return NextResponse.json({ url: page });
-      console.error('checkout: no payment page for', buyerCountry.name, engine, res.paymentUrl);
-      throw new CheckoutError(gateway(buyer.gateway)!.name + ' isn’t available for your order right now. You have not been charged. Please choose another payment method or try again later.');
+      console.error('checkout: no payment page for', buyerCountry.name, res.paymentUrl);
+      throw new CheckoutError('Payment isn’t available for your order right now. You have not been charged. Please try again later.');
     }
 
     // Alfred's messages are written for buyers (sold out, max per email, ...)

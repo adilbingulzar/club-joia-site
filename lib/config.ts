@@ -123,7 +123,7 @@ export const CJ_CONFIG = {
   tickets: tickets,
 
   payment: {
-    // false: the summary page hides the payment options and disables its button.
+    // false: the summary page disables its payment button.
     enabled: false,
     /*
      * Preferred: an endpoint on your server that creates ONE checkout for the
@@ -140,18 +140,6 @@ export const CJ_CONFIG = {
     smsFee: 1,
 
     /*
-     * Payment gateways the buyer chooses from, `engine` as Alfred names it.
-     * The buyer's country selects the gateway listing it (else defaultGateway);
-     * the buyer can still pick another one.
-     */
-    gateways: [
-      { id: 'noon',         name: 'noon',         engine: 'noon',          countries: ['AE'] },
-      { id: 'multisafepay', name: 'MultiSafepay', engine: 'multisafe pay', countries: [] as string[] },
-      { id: 'paynl',        name: 'Pay.nl',       engine: 'paynl',         countries: ['NL', 'BE'] }
-    ],
-    defaultGateway: 'multisafepay',
-
-    /*
      * Fallback when no endpoint is set: if the order holds a single ticket,
      * the buyer is sent to that ticket's `paymentLink`. Enable
      * "customer can adjust quantity" on the link so they can confirm the count.
@@ -159,18 +147,6 @@ export const CJ_CONFIG = {
     useTicketLinks: true
   }
 };
-
-export type Gateway = (typeof CJ_CONFIG.payment.gateways)[number];
-
-export function gateway(id: string): Gateway | null {
-  return CJ_CONFIG.payment.gateways.filter(function (g) { return g.id === id; })[0] || null;
-}
-
-// The gateway suggested for a country code ("AE"), see payment.gateways.
-export function gatewayFor(countryCode: string): string {
-  const g = CJ_CONFIG.payment.gateways.filter(function (g) { return g.countries.indexOf(countryCode) >= 0; })[0];
-  return g ? g.id : CJ_CONFIG.payment.defaultGateway;
-}
 
 export function ticket(id: string): Ticket | null {
   for (let i = 0; i < tickets.length; i++) if (tickets[i].id === id) return tickets[i];

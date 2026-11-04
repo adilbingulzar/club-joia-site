@@ -26,9 +26,8 @@ Old addresses such as `/tickets.html` or `/thank-you.html` redirect permanently 
 
 Tickets are booked and paid in Alfred (`alfred_master`); the buyer details are filled in on `/summary`.
 
-- `app/api/checkout/route.ts` checks the form, finds the Alfred ticket ids by name ("Ruby Red, 3 days", …) in the event, and calls Alfred's `Api/Eventsnew/buyTickets` (payment methods from `Api/Eventsnew/buyTicketsPaymentMethods`). The browser is sent to the payment page it returns.
-- `app/api/checkout/methods/route.ts` lists the chosen gateway's payment methods (credit card, iDEAL, PayPal, …) with Alfred's icons, so the form shows them like Alfred's own shop. Shared Alfred calls are in `lib/alfred.ts`.
-- The buyer picks the gateway; the country preselects one: United Arab Emirates → noon, Netherlands and Belgium → Pay.nl, every other country → MultiSafepay. noon and MultiSafepay charge the vendor's currency, Pay.nl and this site use the event's: keep both the same in Alfred.
+- `app/api/checkout/route.ts` checks the form, finds the Alfred ticket ids by name ("Ruby Red, 3 days", …) in the event, and calls Alfred's `Api/Eventsnew/buyTickets`. The browser is sent to the payment page it returns. Shared Alfred calls are in `lib/alfred.ts`.
+- The buyer doesn't choose a gateway or method: Alfred decides both from the buyer's country, for vendors in its `paymentEngineByCountryVendors` (`config/custom.php`). The countries are in `ticketPaymentEngineByCountry` there, by lowercase name as this site sends them: a name in `lib/countries.ts` has to match. Every other country pays with MultiSafepay. noon and MultiSafepay charge the vendor's currency, Pay.nl and this site use the event's: keep both the same in Alfred.
 - After payment Alfred sends the buyer to the event's success landing page: set it to `<site>/thank-you` (URL type).
 
 Settings, in `.env.local` (or the server's environment):
