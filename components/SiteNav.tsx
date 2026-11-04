@@ -34,7 +34,7 @@ export function PageHeader(props: { cta?: Cta; current?: string }) {
 export function Footer() {
   return (
     <footer>
-      <div className="wrap"><span>Club JOIA 300 | Abu Dhabi Grand Prix, December 4, 5 &amp; 6</span><span>An Elixium Events production</span></div>
+      <div className="wrap"><span>Club JOIA 300 | Abu Dhabi Grand Prix, December 4, 5 &amp; 6</span><span>An Elixium Events production</span><small className="processed-by">Arrangement processed by tiqs.com/pleazz.nl/tiqs-me</small></div>
     </footer>
   );
 }
