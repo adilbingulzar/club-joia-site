@@ -43,7 +43,7 @@ export const config = {
   // Static build files can't reveal anything on their own and ticket emails must keep working (next.config.ts);
   // the sales dashboard (/admin, with the logo it shows) has its own sign-in;
   // the ticket shop's APIs (Api/Eventsnew, shop/) are called by this site's own server, Telr and the emails;
-  // the pre-registration page (preregister/) and its form (api/preregister) are what visitors get;
+  // the pre-registration page (preregister/), its privacy notice (privacy) and form (api/preregister) are what visitors get;
   // everything else, API included, goes to the pre-registration page.
-  matcher: ['/((?!_next/static|_next/image|booking_events/pdf/|Ajaxdorian/getQrcodeImage/|uploads/qrcodes/|assets/(?!img/)|assets/img/logo\\.png$|admin(?:/|$)|Api/Eventsnew/|shop/|preregister/|api/preregister$|ticketing/download|downloadticketpdf/).*)']
+  matcher: ['/((?!_next/static|_next/image|booking_events/pdf/|Ajaxdorian/getQrcodeImage/|uploads/qrcodes/|assets/(?!img/)|assets/img/logo\\.png$|admin(?:/|$)|Api/Eventsnew/|shop/|preregister/|privacy$|api/preregister$|ticketing/download|downloadticketpdf/).*)']
 };

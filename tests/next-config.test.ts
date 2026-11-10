@@ -22,7 +22,7 @@ describe('ticket email paths', function () {
 
   it('are not served without that server', async function () {
     vi.stubEnv('ALFRED_UAE_URL', '');
-    expect(await nextConfig.rewrites!()).toEqual([]);
+    expect(await nextConfig.rewrites!()).toEqual([{ source: '/privacy', destination: '/preregister/privacy.html' }]);
   });
 
   it('stay open during maintenance', function () {
@@ -61,6 +61,8 @@ describe('ticket email paths', function () {
     expect(showsMaintenance('/preregister/index.html')).toBe(false);
     expect(showsMaintenance('/preregister/assets/img/hero-yacht.webp')).toBe(false);
     expect(showsMaintenance('/api/preregister')).toBe(false);
+    expect(showsMaintenance('/privacy')).toBe(false);
+    expect(showsMaintenance('/privacy-x')).toBe(true);
     expect(showsMaintenance('/api/preregisters')).toBe(true);
   });
 });
@@ -116,5 +118,12 @@ describe('maintenance', function () {
     vi.stubEnv('MAINTENANCE_KEY', '');
     expect(closed(visit('/tickets?dev='))).toBe(true);
     expect(closed(visit('/tickets', 'cj300-dev='))).toBe(true);
+  });
+});
+
+describe('privacy notice', function () {
+  it('is at /privacy, the old address sends there', async function () {
+    expect(await nextConfig.rewrites!()).toContainEqual({ source: '/privacy', destination: '/preregister/privacy.html' });
+    expect(await nextConfig.redirects!()).toContainEqual({ source: '/preregister/privacy.html', destination: '/privacy', permanent: true });
   });
 });

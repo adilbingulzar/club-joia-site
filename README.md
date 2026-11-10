@@ -141,7 +141,7 @@ While `MAINTENANCE_MODE=true`, visitors get the CLUB JOIA 300 pre-registration p
 of the site (`proxy.ts`); every other page sends them there, and other APIs answer 503. Developers
 still open the full site with `?dev=<MAINTENANCE_KEY>`.
 
-- `public/preregister/` — the page as designed (`index.html`, `privacy.html`, `assets/`: styles,
+- `public/preregister/` — the page as designed (`index.html`, `privacy.html` served at `/privacy` (`next.config.ts`), `assets/`: styles,
   script, self-hosted fonts and images). Its text is in `index.html`.
 - `app/api/preregister/route.ts`, `lib/preregister.ts` — its form: checks, saving, emails. Was the
   package's `register.php`; now `pre_registrations` in the same database (one row per
@@ -152,8 +152,9 @@ still open the full site with `?dev=<MAINTENANCE_KEY>`.
 - `/admin/registrations` — the list, search and CSV download, behind the dashboard's sign-in (was
   the package's PHP admin with its own password).
 
-Before launch, `public/preregister/privacy.html` needs its four highlighted placeholders filled in
-(company name and address, privacy contact email twice, retention period).
+Before launch, `public/preregister/privacy.html` needs its last highlighted placeholder filled in:
+the legal company name and registered address. (Privacy contact: the Data Protection Officer,
+DPO@clubjoia300.com; retention: 180 days from the date of delivery.)
 
 ## Sales dashboard (/admin)
 
