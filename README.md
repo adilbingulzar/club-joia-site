@@ -42,3 +42,17 @@ MAINTENANCE_KEY=long-random-text            # optional: developers open the site
 ```
 
 Ticket names, prices, the event's currency and stock live in Alfred; names must match `tier.name + ', ' + package.name` in `lib/config.ts`.
+
+`ALFRED_URL` can also point to the members app (`club-joia-300-white`), whose `shop/` answers the same calls and takes payment with Telr; `ALFRED_EVENT_ID` is then the event's slug (see that project's `shop/README.md`).
+
+## Sales dashboard (/admin)
+
+Ticket orders with figures, charts, filters, an order list, each order's detail and a CSV export, read only. Staff sign in with their account of the members app (admins only): the backend checks the password (`/shop/admin/login`), this site keeps a signed cookie for 12 hours. Every page asks the backend again, so a staff member disabled there is signed out here.
+
+- `app/admin/` — the dashboard (`page.tsx`), sign-in (`login/`, `actions.ts`), an order (`orders/[ref]/`), the CSV (`export/route.ts`).
+- `lib/admin/` — session cookie, backend calls, filters (days in Dubai time), formats, CSV. `components/admin/` — charts and shared pieces.
+- `/admin` stays open during maintenance, it has its own sign-in.
+
+```bash
+SHOP_ADMIN_KEY=long-random-text   # the same value as SHOP_ADMIN_KEY in the backend's .env
+```

@@ -38,7 +38,15 @@ describe('ticket email paths', function () {
     expect(showsMaintenance('/')).toBe(true);
     expect(showsMaintenance('/tickets')).toBe(true);
     expect(showsMaintenance('/api/checkout')).toBe(true);
-    expect(showsMaintenance('/assets/img/logo.png')).toBe(true);
+    expect(showsMaintenance('/assets/img/cards/ruby-red.webp')).toBe(true);
+    expect(showsMaintenance('/administration')).toBe(true);
+  });
+
+  it('leave the sales dashboard and its logo open, it has its own sign-in', function () {
+    expect(showsMaintenance('/admin')).toBe(false);
+    expect(showsMaintenance('/admin/login')).toBe(false);
+    expect(showsMaintenance('/admin/orders/CJ123')).toBe(false);
+    expect(showsMaintenance('/assets/img/logo.png')).toBe(false);
   });
 });
 

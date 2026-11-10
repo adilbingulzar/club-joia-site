@@ -56,6 +56,7 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   // Static build files can't reveal anything on their own and ticket emails must keep working (next.config.ts);
+  // the sales dashboard (/admin, with the logo it shows) has its own sign-in;
   // everything else, API included, shows the page.
-  matcher: ['/((?!_next/static|_next/image|booking_events/pdf/|Ajaxdorian/getQrcodeImage/|uploads/qrcodes/|assets/(?!img/)|ticketing/download|downloadticketpdf/).*)']
+  matcher: ['/((?!_next/static|_next/image|booking_events/pdf/|Ajaxdorian/getQrcodeImage/|uploads/qrcodes/|assets/(?!img/)|assets/img/logo\\.png$|admin(?:/|$)|ticketing/download|downloadticketpdf/).*)']
 };

@@ -30,12 +30,12 @@ const PAGES: Record<string, Page> = {
   },
   cancel: {
     title: 'Payment Cancelled', eyebrow: 'Payment cancelled', heading: 'Your payment was cancelled.',
-    text: 'You have not been charged. Your tickets are still in your order, so you can try again or choose another payment method.',
+    text: 'You have not been charged. Your tickets are still in your order, so you can try again.',
     inProgress: false
   },
   denied: {
     title: 'Payment Declined', eyebrow: 'Payment declined', heading: 'Your payment didn’t go through.',
-    text: 'You have not been charged. Please try again, use another card or choose another payment method.',
+    text: 'You have not been charged. Please try again or use another card.',
     inProgress: false
   }
 };
