@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:setup": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/db-setup.mjs"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",

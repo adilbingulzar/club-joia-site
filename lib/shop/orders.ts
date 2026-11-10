@@ -1,6 +1,7 @@
 /*
  * The ticket shop: event, prices and stock for the site, orders, Telr payment and what follows.
- * The HTTP side is in app/Api/Eventsnew (the calls lib/alfred.ts makes, the same answers as
+ * The site's pages call these functions directly (lib/catalog.ts, app/api/checkout); an HTTP side is
+ * in app/Api/Eventsnew (the same answers as
  * Alfred's ticket API) and app/shop (payment link, Telr's return and advice, retry).
  *
  * The event id is the event's slug (SHOP_EVENT), the ticket ids are the products' (products.ts).

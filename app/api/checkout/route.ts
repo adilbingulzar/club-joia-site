@@ -1,14 +1,13 @@
 /*
- * Books the order in Alfred and returns the payment provider's page: { url }.
- * Alfred decides the gateway (noon, MultiSafepay or Pay.nl) and how to pay on it from the buyer's
- * country, the buyer doesn't choose: see ticketPaymentEngineByCountry in Alfred's config/custom.php.
- * After payment Alfred sends the buyer to the event's success landing page (/thank-you).
+ * Books the order in the ticket shop (lib/shop) and returns Telr's payment page: { url }.
+ * After payment the shop sends the buyer to /thank-you (or /payment/<status>).
  */
 import { NextResponse } from 'next/server';
 import { CJ_CONFIG as cfg, ticket } from '@/lib/config';
 import { country } from '@/lib/countries';
-import { ALFRED_URL, EVENT_ID, alfred } from '@/lib/alfred';
 import { getCatalog } from '@/lib/catalog';
+import { shopConfig } from '@/lib/shop/config';
+import { buyTickets, payUrl, ticketTypes } from '@/lib/shop/orders';
 import { isOver21, UNDER_21 } from '@/lib/age';
 
 type Buyer = {
@@ -54,39 +53,27 @@ function readBuyer(raw: Record<string, unknown>): Buyer {
   return b;
 }
 
-// Alfred ticket ids of the event by name ("Ruby Red, 3 days"), so prices and stock stay in Alfred.
-async function alfredTicketIds(): Promise<Record<string, string>> {
-  const list = await alfred('Api/Eventsnew/buyTicketsTicketTypes', { eventId: EVENT_ID, ticketType: '0' });
+// the shop's ticket ids of the event by name ("Ruby Red, 3 days"), the ones on sale
+async function ticketIds(): Promise<Record<string, string>> {
   const ids: Record<string, string> = {};
-  if (Array.isArray(list)) {
-    list.forEach(function (t) {
-      if (t && t.softDelete === '0' && t.ticketVisible === '1') ids[String(t.ticketDescription).trim()] = String(t.id);
-    });
-  }
+  (await ticketTypes(shopConfig.event)).forEach(function (t) {
+    if (t.softDelete === '0' && t.ticketVisible === '1') ids[String(t.ticketDescription).trim()] = String(t.id);
+  });
   return ids;
 }
 
-// Follows Alfred's payment link to the provider's payment page, so a payment that can't be
-// started (noon refusing the order, ...) is reported on the form instead of after a trip to Alfred.
-// null when Alfred ends on its denied or error page.
-async function paymentPage(url: string): Promise<string | null> {
-  // the server that made the link, ALFRED_URL can be the Europe server in front of it
-  const alfredOrigin = new URL(url).origin;
-  for (let hop = 0; hop < 5; hop++) {
-    const r = await fetch(url, { redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(20000) });
-    const location = r.headers.get('location');
-    if (r.status < 300 || r.status >= 400 || !location) return null;
-    const next = new URL(location, url);
-    if (next.origin !== alfredOrigin) return next.href;
-    if (/\/ticketing_/.test(next.pathname)) return null;
-    url = next.href;
-  }
-  return null;
+// Telr's payment page of the order, so a payment that can't be started (Telr refusing the
+// order, ...) is reported on the form. null when the shop has no payment page for it (it answers
+// with one of this site's own pages then).
+async function paymentPage(ref: string): Promise<string | null> {
+  const url = await payUrl(ref);
+  if (!url) return null;
+  return new URL(url).origin === new URL(shopConfig.publicUrl).origin ? null : url;
 }
 
 export async function POST(request: Request) {
-  if (!ALFRED_URL || !EVENT_ID) {
-    console.error('checkout: ALFRED_URL and ALFRED_EVENT_ID must be set');
+  if (!shopConfig.event || !shopConfig.publicUrl) {
+    console.error('checkout: SHOP_EVENT and SHOP_SITE_URL must be set');
     return NextResponse.json({ error: 'Online payment isn’t set up yet. Please contact us to complete your booking.' }, { status: 500 });
   }
 
@@ -100,7 +87,7 @@ export async function POST(request: Request) {
     const buyerCountry = country(buyer.country)!;
     const catalog = await getCatalog();
     if (!catalog.live) throw new CheckoutError('Ticket prices can’t be loaded right now. You have not been charged. Please try again in a moment.');
-    const ids = await alfredTicketIds();
+    const ids = await ticketIds();
 
     const form: Record<string, string> = {
       name: buyer.firstName,
@@ -109,14 +96,13 @@ export async function POST(request: Request) {
       address: buyer.address,
       zipcode: buyer.zipcode,
       city: buyer.city,
-      // lowercase name, as Alfred's own shop sends it. Alfred's payment gateway table goes by it.
       country: buyerCountry.name.toLowerCase(),
       countryPhoneCode: country(buyer.phoneCode)!.dial,
       phoneNumber: buyer.phone,
-      // the buyer's address, for the ticket API's limit on unpaid orders
+      // the buyer's address, for the shop's limit on unpaid orders
       ip: (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || request.headers.get('x-real-ip') || ''
     };
-    // Left out when empty: Alfred's age column is a date and can't hold an empty text.
+    // left out when empty
     if (buyer.gender) form.gender = buyer.gender;
     if (buyer.birthday) form.age = buyer.birthday;
 
@@ -131,15 +117,15 @@ export async function POST(request: Request) {
       form['tickets[' + i + '][quantity]'] = String(quantity);
     });
 
-    const res = await alfred('Api/Eventsnew/buyTickets', form);
-    if (res && res.status === '1' && res.paymentUrl) {
-      const page = await paymentPage(String(res.paymentUrl));
+    const res = await buyTickets(form);
+    if (res.status === '1' && res.orderId) {
+      const page = await paymentPage(res.orderId);
       if (page) return NextResponse.json({ url: page });
-      console.error('checkout: no payment page for', buyerCountry.name, res.paymentUrl);
+      console.error('checkout: no payment page for', buyerCountry.name, res.orderId);
       throw new CheckoutError('Payment isn’t available for your order right now. You have not been charged. Please try again later.');
     }
 
-    // Alfred's messages are written for buyers (sold out, max per email, ...)
+    // the shop's messages are written for buyers (sold out, unfinished orders, ...)
     throw new CheckoutError(res && res.message ? String(res.message) : 'We couldn’t start the payment. Please try again in a moment.');
   } catch (e) {
     if (e instanceof CheckoutError) return NextResponse.json({ error: e.message }, { status: 400 });

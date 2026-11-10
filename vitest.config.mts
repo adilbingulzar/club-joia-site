@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
-    // Alfred is never called: tests/alfred-mock.ts answers instead
-    env: { ALFRED_URL: 'http://alfred.test', ALFRED_EVENT_ID: '5263', ALFRED_VENDOR_ID: '462967', SHOP_ADMIN_KEY: 'unit-test-shop-key-0123456789' }
+    // the shop's functions are faked by tests/shop-mock.ts (tests/shop.test.ts uses the real ones on a database)
+    env: { SHOP_EVENT: 'abu-dhabi-2026', SHOP_SITE_URL: 'http://site.test', SHOP_ADMIN_KEY: 'unit-test-shop-key-0123456789' }
   }
 });

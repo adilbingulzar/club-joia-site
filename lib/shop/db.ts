@@ -177,6 +177,11 @@ function whenReady(): Promise<void> {
   return shared.ready;
 }
 
+// makes the shop's tables now (npm run db:setup after a deploy), instead of on first use
+export function setupTables(): Promise<void> {
+  return whenReady();
+}
+
 export const db: Db = {
   async query(text, params) {
     await whenReady();

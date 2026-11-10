@@ -1,46 +1,44 @@
 /*
- * Prices, currency and sold out of the tickets, from Alfred (server only):
- * the event's tickets (Api/Eventsnew/buyTicketsTicketTypes, matched by name, "Ruby Red, 3 days"),
- * how many are left of each (buyTicketsSoldOut) and the event's currency (buyTicketsEvents).
+ * Prices, currency and sold out of the tickets, from the ticket shop (lib/shop, server only):
+ * the event's tickets (ticketTypes, matched by name, "Ruby Red, 3 days"), how many are left of
+ * each (soldOut) and the event's currency (events). The event is SHOP_EVENT.
  * Pages get the last answer at once and a newer one is fetched behind it when it is over a
- * minute old, so only the first page after a start waits for Alfred. When Alfred can't be
+ * minute old, so only the first page after a start waits for the database. When it can't be
  * reached the last answer stays, else the catalogue is unavailable (no prices, no ordering).
  */
 import { CJ_CONFIG as cfg, unavailableCatalog, money, type Catalog } from './config';
-import { ALFRED_URL, EVENT_ID, VENDOR_ID, alfred } from './alfred';
+import { shopConfig } from './shop/config';
+import { events, soldOut, ticketTypes } from './shop/orders';
 
 const TTL = 60 * 1000;
 const RETRY = 10 * 1000; // after a failed load without an answer to show
-const TIMEOUT = 8000;
 
-// Alfred's event currencies ("euro", "aed", ...) as ISO codes.
+// the event's currency ("usd", ...) as an ISO code
 const CURRENCIES: Record<string, string> = { euro: 'EUR', usd: 'USD', aed: 'AED', mad: 'MAD', gbp: 'GBP' };
 
 let cache: { at: number; catalog: Catalog } | null = null;
 let pending: Promise<Catalog> | null = null;
 
 async function load(): Promise<Catalog> {
-  if (!ALFRED_URL || !EVENT_ID || !VENDOR_ID) throw new Error('ALFRED_URL, ALFRED_EVENT_ID and ALFRED_VENDOR_ID must be set');
+  const eventId = shopConfig.event;
+  if (!eventId) throw new Error('SHOP_EVENT must be set');
 
-  const [types, events] = await Promise.all([
-    alfred('Api/Eventsnew/buyTicketsTicketTypes', { eventId: EVENT_ID, ticketType: '0' }, TIMEOUT),
-    alfred('Api/Eventsnew/buyTicketsEvents', { vendorId: VENDOR_ID }, TIMEOUT)
-  ]);
-  const event = (Array.isArray(events) ? events : []).filter(function (e) { return String(e && e.id) === EVENT_ID; })[0];
+  const [types, list] = await Promise.all([ticketTypes(eventId), events()]);
+  const event = list.filter(function (e) { return e.id === eventId; })[0];
   const currency = event && CURRENCIES[event.eventCurrency];
-  if (!currency) throw new Error('Alfred event ' + EVENT_ID + ' not found for vendor ' + VENDOR_ID + ' or has no currency');
+  if (!currency) throw new Error('event ' + eventId + ' is not on sale or has no currency');
 
   const byName: Record<string, { id: string; ticketPrice: string }> = {};
-  (Array.isArray(types) ? types : []).forEach(function (t) {
+  types.forEach(function (t) {
     if (t && t.softDelete === '0' && t.ticketVisible === '1') byName[String(t.ticketDescription).trim()] = t;
   });
 
   const tickets: Catalog['tickets'] = {};
   await Promise.all(cfg.tickets.map(async function (t) {
     const a = byName[t.name];
-    // not on sale in Alfred
+    // not on sale in the shop
     if (!a) { tickets[t.id] = { price: null, soldOut: true }; return; }
-    const left = await alfred('Api/Eventsnew/buyTicketsSoldOut', { ticketId: String(a.id) }, TIMEOUT);
+    const left = await soldOut(String(a.id));
     tickets[t.id] = { price: Number(a.ticketPrice), soldOut: t.soldOut || !(Number(left && left.left_tickets) > 0) };
   }));
 

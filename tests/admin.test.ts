@@ -4,7 +4,7 @@ import { backendQuery, pageQuery, previousPeriod, readFilters } from '@/lib/admi
 import { revenueSeries } from '@/lib/admin/series';
 import { ordersCsv } from '@/lib/admin/csv';
 import { change, compact, percent } from '@/lib/admin/format';
-import { adminGet, adminLogin, SignedOut, type OrderRow } from '@/lib/admin/backend';
+import type { OrderRow } from '@/lib/admin/backend';
 
 const USER = { id: 'cmuser1', email: 'admin@joia.test', name: 'Joia Admin', role: 'SUPER_ADMIN' };
 // 9 Nov 2026, 10:00 in Dubai
@@ -111,35 +111,51 @@ describe('admin CSV', function () {
 });
 
 describe('admin backend calls', function () {
-  beforeEach(function () {
-    vi.stubEnv('ALFRED_URL', 'http://backend.test/');
-    vi.spyOn(console, 'error').mockImplementation(function () {});
-  });
+  type Reply = { status: number; body: unknown };
+  const seen: { request: Request; path: string }[] = [];
+
+  // lib/admin/backend with the shop's admin API (lib/shop/admin) answering reply()
+  async function backend(reply: () => Reply | Promise<Reply>) {
+    seen.length = 0;
+    vi.resetModules();
+    vi.doMock('@/lib/shop/admin', function () {
+      return { adminApi: async function (request: Request, path: string) { seen.push({ request, path }); return reply(); } };
+    });
+    return import('@/lib/admin/backend');
+  }
+
+  beforeEach(function () { vi.spyOn(console, 'error').mockImplementation(function () {}); });
+  afterEach(function () { vi.doUnmock('@/lib/shop/admin'); });
 
   it('sends the key and the signed-in staff member', async function () {
-    const fetchMock = vi.fn(async function () { return Response.json({ ok: 1 }); });
-    vi.stubGlobal('fetch', fetchMock);
+    const { adminGet } = await backend(function () { return { status: 200, body: { ok: 1 } }; });
     expect(await adminGet('stats?from=2026-11-01', USER)).toEqual({ ok: 1 });
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('http://backend.test/shop/admin/stats?from=2026-11-01');
-    expect(init.headers).toEqual({ Authorization: 'Bearer test-admin-key-0123456789', 'X-Admin-User': 'cmuser1' });
+    expect(seen[0].path).toBe('stats');
+    expect(new URL(seen[0].request.url).searchParams.get('from')).toBe('2026-11-01');
+    expect(seen[0].request.headers.get('authorization')).toBe('Bearer test-admin-key-0123456789');
+    expect(seen[0].request.headers.get('x-admin-user')).toBe('cmuser1');
   });
 
   it('signs out on 401, finds nothing on 404, fails otherwise', async function () {
-    vi.stubGlobal('fetch', vi.fn(async function () { return new Response('', { status: 401 }); }));
+    let status = 401;
+    const { adminGet, SignedOut } = await backend(function () { return { status, body: {} }; });
     await expect(adminGet('stats', USER)).rejects.toBeInstanceOf(SignedOut);
-    vi.stubGlobal('fetch', vi.fn(async function () { return new Response('', { status: 404 }); }));
+    status = 404;
     expect(await adminGet('orders/X', USER)).toBeNull();
-    vi.stubGlobal('fetch', vi.fn(async function () { return new Response('', { status: 500 }); }));
-    await expect(adminGet('stats', USER)).rejects.toThrow('HTTP 500');
+    expect(seen[1].path).toBe('orders/X');
+    status = 500;
+    await expect(adminGet('stats', USER)).rejects.toThrow('500');
   });
 
-  it('signs in through the backend and passes its messages on', async function () {
-    vi.stubGlobal('fetch', vi.fn(async function () { return Response.json({ user: USER }); }));
+  it('signs in through the API and passes its messages on', async function () {
+    let reply: () => Reply | Promise<Reply> = function () { return { status: 200, body: { user: USER } }; };
+    const { adminLogin } = await backend(function () { return reply(); });
     expect(await adminLogin('admin@joia.test', 'pw', '1.2.3.4')).toEqual({ user: USER });
-    vi.stubGlobal('fetch', vi.fn(async function () { return Response.json({ error: 'Email or password is incorrect.' }, { status: 401 }); }));
+    expect(seen[0].path).toBe('login');
+    expect(await seen[0].request.json()).toEqual({ email: 'admin@joia.test', password: 'pw', ip: '1.2.3.4' });
+    reply = function () { return { status: 401, body: { error: 'Email or password is incorrect.' } }; };
     expect(await adminLogin('admin@joia.test', 'bad', '1.2.3.4')).toEqual({ error: 'Email or password is incorrect.' });
-    vi.stubGlobal('fetch', vi.fn(async function () { throw new Error('down'); }));
+    reply = function () { throw new Error('down'); };
     expect((await adminLogin('admin@joia.test', 'pw', '1.2.3.4')).error).toMatch(/isn’t available/);
   });
 });

@@ -1,6 +1,6 @@
 /*
- * The ticket API the site calls (lib/alfred.ts, ALFRED_URL = this site): the same calls and
- * answers as Alfred's ticket API, so lib/catalog.ts and app/api/checkout stay as they were.
+ * The ticket shop over HTTP, with Alfred's ticket API's calls and answers. The site's own pages
+ * don't use it: they call lib/shop directly.
  * POST, form fields:
  *   buyTicketsEvents       vendorId                      -> [{ id, eventname, eventCurrency, ... }]
  *   buyTicketsTicketTypes  eventId                       -> [{ id, ticketDescription, ticketPrice, softDelete, ticketVisible }]

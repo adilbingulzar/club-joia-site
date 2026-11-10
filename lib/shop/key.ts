@@ -9,7 +9,7 @@ export function shopKey(): string {
   return String(process.env.SHOP_ADMIN_KEY || '').trim();
 }
 
-// the header lib/alfred.ts and lib/admin/backend.ts send
+// the header lib/admin/backend.ts sends
 export function shopKeyHeader(): Record<string, string> {
   return { Authorization: 'Bearer ' + shopKey() };
 }

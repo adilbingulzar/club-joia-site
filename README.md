@@ -8,7 +8,7 @@ Next.js version of the Club JOIA 300 ticket site (clubjoia300.com). Design and b
 npm install
 npm run dev      # development, http://localhost:3000
 npm run build && npm start   # production
-npm test         # tests (tests/, Vitest); the ticket API is faked by tests/alfred-mock.ts
+npm test         # tests (tests/, Vitest); the shop's functions are faked by tests/shop-mock.ts
 SHOP_TEST_DATABASE_URL=mysql://... npm test   # also the ticket shop on a local database (tests/shop.test.ts)
 # as the site's limited user: SHOP_TEST_DATABASE_URL=mysql://club_site:... SHOP_TEST_ADMIN_DATABASE_URL=mysql://root:... npm test
 # (in these test addresses a @ in a password is written %40)
@@ -29,8 +29,8 @@ Locally that's `joia_dev` on this machine's MySQL.
 
 ## Where things live
 
-- `lib/config.ts` — access levels, day packages, benefits, sold-out flags and payment settings. Its prices and currency are only used while the ticket API can't be reached.
-- `lib/catalog.ts` — prices, currency and sold out from the ticket API (`buyTicketsTicketTypes`, `buyTicketsSoldOut`, `buyTicketsEvents`). Pages get the last answer at once and a newer one is fetched behind it after a minute; prices show a shimmering bar until it has answered (`components/Price.tsx` on server pages, `lib/prices.tsx` for client components) and "Price unavailable" when it can't be reached.
+- `lib/config.ts` — access levels, day packages, benefits, sold-out flags and payment settings. Its prices and currency are only used while the shop can't be reached.
+- `lib/catalog.ts` — prices, currency and sold out from the ticket shop (`ticketTypes`, `soldOut`, `events` of `lib/shop/orders.ts`), for the event `SHOP_EVENT`. Pages get the last answer at once and a newer one is fetched behind it after a minute; prices show a shimmering bar until it has answered (`components/Price.tsx` on server pages, `lib/prices.tsx` for client components) and "Price unavailable" when it can't be reached.
 - `lib/cart.ts` — the cart, kept in `sessionStorage` (key `cj300-cart`) so it survives page changes.
 - `app/globals.css` — the original `main.css`, unchanged except that `-webkit-backdrop-filter` is declared before `backdrop-filter` (the CSS minifier drops the standard one otherwise).
 - `app/` — one folder per page: `/`, `/ruby-red`, `/pearly-white`, `/ultra-black`, `/tickets`, `/summary`, `/thank-you`, `/payment/[status]`, plus `not-found.tsx`.
@@ -43,15 +43,14 @@ Old addresses such as `/tickets.html` or `/thank-you.html` redirect permanently 
 
 The site sells the tickets itself, in **USD**, paid with **Telr**, and writes the buyer as a member
 with the tickets into the members app's MySQL database (`club-joia-300-backend`, whose code isn't
-used: only its database). Alfred is no longer used. The site's pages call the shop over HTTP at
-`ALFRED_URL` (this site itself) with the calls Alfred's ticket API had, so the variable names still
-say `ALFRED_`.
+used: only its database). Alfred is no longer used. The site's pages call the shop's functions
+directly (`lib/shop`), not over HTTP.
 
 1. `/summary`: the buyer fills in their details. `app/api/checkout/route.ts` checks the form and
-   calls `Api/Eventsnew/buyTickets` (`lib/alfred.ts`), each ticket by its id `<tier>/<package>`
+   calls `buyTickets` (`lib/shop/orders.ts`), each ticket by its id `<tier>/<package>`
    ("ruby-red/3-days"). The order is saved in `shop_orders`.
-2. The browser goes to the payment link it returns (`/shop/pay/<ref>`), which makes the Telr order
-   and opens Telr's payment page.
+2. The checkout makes the Telr order (`payUrl`) and sends the browser to Telr's payment page.
+   (`/shop/pay/<ref>` does the same for a link.)
 3. Back from Telr (`/shop/telr/return/<ref>`), or Telr's transaction advice (`/shop/telr/advice`):
    the status is asked from Telr, never taken from the request. Then `/thank-you?orderid=<ref>`
    when paid, else `/payment/pending`, `/payment/denied` or `/payment/cancel`.
@@ -82,9 +81,9 @@ The currency (`SHOP_CURRENCY`, USD) must be one the Telr store accepts, else Tel
 
 Security:
 
-- **Only this site's server calls the ticket API** (`Api/Eventsnew/...`) and the dashboard's API
-  (`shop/admin/...`): each call carries `SHOP_ADMIN_KEY` as a bearer token (`lib/shop/key.ts`),
-  without it they answer 401. So every order passes the checkout's checks (age, terms, ...).
+- **The site calls the shop directly**, not over HTTP. Its HTTP routes `Api/Eventsnew/...` and
+  `shop/admin/...` are no longer used by the site and answer 401 without `SHOP_ADMIN_KEY` as a
+  bearer token (`lib/shop/key.ts`), so every order passes the checkout's checks (age, terms, ...).
   `shop/pay`, `shop/telr`, `shop/retry` and `shop/email` stay open: buyers, Telr and the emails use them.
 - **Payment status comes from Telr only**, never from a request; cart, amount, currency and test
   flag must match the order.
@@ -106,17 +105,14 @@ The database: one, the members app's (`joia_dev` locally). Its own tables (`user
 Prisma's `migrate dev` in the members app sees the `shop_` tables as drift and offers to reset the
 database: answer no (it would delete everything). On the live server `migrate deploy` doesn't check this.
 
-Settings, in `.env.local` (or the server's environment):
+All settings are in one file, `.env` (or the server's environment), in blocks with comments:
 
 ```bash
-ALFRED_URL=https://clubjoia300.com          # this site, where its pages reach the ticket API; locally http://localhost:3000
-ALFRED_EVENT_ID=abu-dhabi-2026              # the event's slug, the same as SHOP_EVENT
-ALFRED_VENDOR_ID=40                         # sent along as Alfred had it, not used
 ALFRED_UAE_URL=https://tiqs.it              # optional: old Alfred ticket emails' links (PDF, QR) keep working; read at build time
 MAINTENANCE_MODE=true                       # optional: visitors get the pre-registration page (below); /admin, the ticket shop's routes and ticket email links stay open; restart to apply
 MAINTENANCE_KEY=long-random-text            # optional: developers open the site once with ?dev=<this key> during maintenance
 
-# the database: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME in .env (above)
+# the database: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME (above)
 SHOP_EVENT=abu-dhabi-2026                   # the event on sale, by its slug (members app: Admin > Events)
 SHOP_CURRENCY=USD
 SHOP_SITE_URL=https://clubjoia300.com       # this site: Telr's return, the payment and email links
@@ -171,7 +167,9 @@ server and its APIs, and signs the dashboard's cookie.
 
 1. The site and the database are on the same server. Make the site's database user there yourself,
    with the permissions above, and put it in `.env` (`DB_HOST="127.0.0.1"`).
-2. `.env.local` as above (`TELR_TEST=1` first), then `npm ci && npm run build` and restart.
+2. `.env` as above (`TELR_TEST=1` first; `.env` isn't in git, put it on the server yourself), then
+   `npm ci && npm run build`, `npm run db:setup` (makes the site's tables now: it prints which
+   database it used, or why it failed) and restart. The database user needs CREATE for that.
 3. In Telr's dashboard: transaction advice URL `https://clubjoia300.com/shop/telr/advice`, and the
    store accepting USD.
 4. Buy once (paid and declined) from the live site and check the emails, the member and tickets in

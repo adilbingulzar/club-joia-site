@@ -1,9 +1,11 @@
 /*
- * The shop's admin API (this site's /shop/admin, lib/shop/admin.ts), server side only: at ALFRED_URL,
- * with SHOP_ADMIN_KEY as a bearer token and the signed-in staff member in X-Admin-User.
+ * The shop's admin API (lib/shop/admin.ts), server side only: called directly, not over HTTP,
+ * with SHOP_ADMIN_KEY as a bearer token and the signed-in staff member in X-Admin-User, as its
+ * HTTP route (/shop/admin) gets them.
  */
 import type { AdminUser } from './session';
 import { shopKeyHeader } from '../shop/key';
+import { adminApi } from '../shop/admin';
 
 export class SignedOut extends Error {}
 
@@ -42,41 +44,39 @@ export type OrderDetail = OrderRow & {
   ticketList: { number: string; code: string; name: string; status: string }[];
 };
 
-function base(): string {
-  const url = (process.env.ALFRED_URL || '').replace(/\/+$/, '');
-  if (!url || !process.env.SHOP_ADMIN_KEY) throw new Error('ALFRED_URL and SHOP_ADMIN_KEY must be set for the sales dashboard');
-  return url;
-}
-
 function headers(user?: AdminUser): Record<string, string> {
   const h: Record<string, string> = shopKeyHeader();
   if (user) h['X-Admin-User'] = user.id;
   return h;
 }
 
-// GET an admin path; SignedOut when the backend no longer accepts the staff member, null for a 404
-export async function adminGet<T>(path: string, user: AdminUser): Promise<T | null> {
-  const r = await fetch(base() + '/shop/admin/' + path, { headers: headers(user), cache: 'no-store', signal: AbortSignal.timeout(20000) });
-  if (r.status === 401) throw new SignedOut();
-  if (r.status === 404) return null;
-  if (!r.ok) throw new Error('Backend shop/admin/' + path.split('?')[0] + ': HTTP ' + r.status);
-  return r.json() as Promise<T>;
+// path: "stats?...", "orders/<ref>", ...
+function call(path: string, init: RequestInit) {
+  const url = new URL('/shop/admin/' + path, 'http://site.internal');
+  return adminApi(new Request(url, init), url.pathname.replace(/^\/shop\/admin\//, ''));
 }
 
-// { user } when the backend accepts the email and password, else { error } for the form
+// GET an admin path; SignedOut when the API no longer accepts the staff member, null for a 404
+export async function adminGet<T>(path: string, user: AdminUser): Promise<T | null> {
+  const r = await call(path, { headers: headers(user) });
+  if (r.status === 401) throw new SignedOut();
+  if (r.status === 404) return null;
+  if (r.status !== 200) throw new Error('shop/admin/' + path.split('?')[0] + ': ' + r.status + ' ' + JSON.stringify(r.body));
+  return r.body as T;
+}
+
+// { user } when the API accepts the email and password, else { error } for the form
 export async function adminLogin(email: string, password: string, ip: string): Promise<{ user?: AdminUser; error?: string }> {
   try {
-    const r = await fetch(base() + '/shop/admin/login', {
+    const r = await call('login', {
       method: 'POST',
       headers: { ...headers(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, ip }),
-      cache: 'no-store',
-      signal: AbortSignal.timeout(20000)
+      body: JSON.stringify({ email, password, ip })
     });
-    const body = await r.json().catch(function () { return {}; });
-    if (r.ok && body.user) return { user: body.user };
+    const body = (r.body || {}) as { user?: AdminUser; error?: string };
+    if (r.status === 200 && body.user) return { user: body.user };
     if (r.status === 400 || r.status === 401 || r.status === 429) return { error: String(body.error || 'Sign-in failed.') };
-    console.error('admin login: backend HTTP ' + r.status);
+    console.error('admin login: ' + r.status);
   } catch (e) {
     console.error('admin login:', e);
   }
