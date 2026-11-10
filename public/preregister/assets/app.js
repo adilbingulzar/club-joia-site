@@ -119,4 +119,17 @@
     formError.textContent = text;
     formError.hidden = false;
   }
+
+  // After a submission the thank-you replaces the form; the "Pre-register" links bring back an
+  // empty form for another one.
+  function showForm() {
+    if (!form.hidden) return;
+    form.reset();
+    Object.keys(messages).forEach((n) => setError(n, ""));
+    formError.hidden = true;
+    $("#started").value = String(Date.now());
+    $("#thanks").hidden = true;
+    form.hidden = false;
+  }
+  document.querySelectorAll('a[href="#register"]').forEach((a) => a.addEventListener("click", showForm));
 })();
