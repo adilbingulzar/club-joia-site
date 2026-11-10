@@ -129,7 +129,7 @@ async function migrate(): Promise<void> {
       KEY sign_in_failures_bucket (bucket, at),
       KEY sign_in_failures_at (at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-    // the pre-registration page (lib/preregister.ts): one row per email, a repeat updates it
+    // the pre-registration page (lib/preregister.ts): one row per submission, the same email may come again
     `CREATE TABLE IF NOT EXISTS pre_registrations (
       id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       email             VARCHAR(191) NOT NULL,
@@ -146,7 +146,7 @@ async function migrate(): Promise<void> {
       user_agent        VARCHAR(255) NULL,
       created_at        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       updated_at        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-      UNIQUE KEY registrations_email (email),
+      KEY registrations_email (email),
       KEY registrations_created (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     // its spam limit: submissions per anonymised connection (never the IP address itself)
@@ -164,6 +164,10 @@ async function migrate(): Promise<void> {
     "INSERT IGNORE INTO shop.locks (name) VALUES ('stock')"
   ];
   for (const sql of tables) await run(pool(), sql);
+  // tables made before one row per submission: email was unique there
+  const unique = await run(pool(),
+    "SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'pre_registrations' AND index_name = 'registrations_email' AND non_unique = 0 LIMIT 1");
+  if (unique.rows.length) await run(pool(), 'ALTER TABLE pre_registrations DROP INDEX registrations_email, ADD INDEX registrations_email (email)');
 }
 
 // the shop's tables, made once per start

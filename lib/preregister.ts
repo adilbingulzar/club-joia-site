@@ -5,7 +5,7 @@
  *
  * Spam protection, as there: a hidden field bots fill in, a minimum time to fill in the form, only
  * from this site's own page, and 5 submissions per hour per connection (an anonymised code, the
- * IP address itself is never stored). A repeat with the same email updates the earlier one.
+ * IP address itself is never stored). Every submission is saved as a row of its own.
  */
 import crypto from 'node:crypto';
 import { db } from './shop/db';
@@ -62,7 +62,7 @@ export async function preregister(s: Submission): Promise<Reply> {
   if (!consent) errors.consent = 'Please agree so we can contact you about your pre-registration.';
   if (Object.keys(errors).length) return { status: 422, body: { ok: false, error: 'Please check the highlighted fields.', fields: errors } };
 
-  let updated = false;
+  let again = false;
   try {
     const ip = ipHash(s.ip);
     await db.query('DELETE FROM shop.registration_attempts WHERE at < NOW(3) - INTERVAL 1 HOUR');
@@ -70,16 +70,13 @@ export async function preregister(s: Submission): Promise<Reply> {
     if (n >= PER_HOUR) return { status: 429, body: { ok: false, error: 'Too many attempts from this connection. Please try again in an hour.' } };
     await db.query('INSERT INTO shop.registration_attempts (ip_hash) VALUES ($1)', [ip]);
 
-    // affectedRows: 1 a new row, 2 an earlier one updated (updated_at always changes)
-    const saved = await db.query(
+    // every submission is a row of its own; "again" when this email has sent the form before
+    again = Number((await db.query('SELECT COUNT(*) AS n FROM pre_registrations WHERE email = $1', [r.email])).rows[0].n) > 0;
+    await db.query(
       `INSERT INTO pre_registrations (email, first_name, last_name, phone, country, tier_interest, source, message, marketing_opt_in, consent_at, ip_hash, user_agent)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(3), $10, $11) AS n
-       ON DUPLICATE KEY UPDATE first_name = n.first_name, last_name = n.last_name, phone = n.phone, country = n.country,
-         tier_interest = n.tier_interest, source = n.source, message = n.message, marketing_opt_in = n.marketing_opt_in,
-         consent_at = n.consent_at, ip_hash = n.ip_hash, user_agent = n.user_agent, updated_at = NOW(3)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(3), $10, $11)`,
       [r.email, r.first_name, r.last_name, r.phone, r.country, r.tier_interest, r.source || null, r.message || null, r.marketing, ip, s.userAgent.slice(0, 255)]
     );
-    updated = saved.affectedRows === 2;
   } catch (e) {
     console.error('[preregister]', e);
     return { status: 500, body: { ok: false, error: 'Something went wrong on our side. Please try again in a moment.' } };
@@ -93,7 +90,7 @@ export async function preregister(s: Submission): Promise<Reply> {
   };
   const support = shopConfig.supportPhone();
   const team = String(process.env.PREREG_NOTIFY_EMAIL || '').trim();
-  if (team) await send(team, preregisterTeam(mail, updated, support));
+  if (team) await send(team, preregisterTeam(mail, again, support));
   if (process.env.PREREG_SEND_CONFIRMATION !== '0') await send(r.email, preregisterGuest(mail, support));
   return { status: 200, body: { ok: true } };
 }

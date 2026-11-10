@@ -391,14 +391,16 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
 
     expect(await send(good, { Origin: 'http://site.test' })).toEqual({ status: 200, body: { ok: true } });
     expect(await send(Object.assign({}, good, { tier_interest: 'Ruby Red', marketing: 'on' }))).toEqual({ status: 200, body: { ok: true } });
-    const rows = (await pool.query('SELECT * FROM pre_registrations WHERE email = $1', [who])).rows;
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ first_name: 'Reg', tier_interest: 'Ruby Red', marketing_opt_in: 1, country: 'United Arab Emirates' });
+    // every submission is a row of its own, the same email too
+    const rows = (await pool.query('SELECT * FROM pre_registrations WHERE email = $1 ORDER BY id', [who])).rows;
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ tier_interest: 'Ultra Black', marketing_opt_in: 0 });
+    expect(rows[1]).toMatchObject({ first_name: 'Reg', tier_interest: 'Ruby Red', marketing_opt_in: 1, country: 'United Arab Emirates' });
     expect(rows[0].ip_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(rows[0])).not.toContain(ip);
     const log = mails.join('\n');
     expect(log).toContain('To: team@example.com\nSubject: New pre-registration: Reg Tester');
-    expect(log).toContain('Subject: Updated pre-registration: Reg Tester');
+    expect(log).toContain('Subject: Repeat pre-registration: Reg Tester');
     expect(log).toContain('To: ' + who + '\nSubject: Your CLUB JOIA 300 pre-registration');
 
     // 5 per hour from one connection (the two saved ones count)
@@ -410,9 +412,9 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     const id = (await signIn.json()).user.id;
     const list = await routes.admin.GET(new Request(SITE + '/shop/admin/registrations?q=' + encodeURIComponent('reg' + stamp), { headers: { Authorization: 'Bearer ' + ADMIN_KEY, 'X-Admin-User': id } }), { params: Promise.resolve({ path: ['registrations'] }) });
     const data = await list.json();
-    expect(data.registrations).toHaveLength(4);
+    expect(data.registrations).toHaveLength(5);
     expect(data.registrations.find(function (r: { email: string }) { return r.email === who; })).toMatchObject({ firstName: 'Reg', tier: 'Ruby Red', marketing: true, message: '=1+1 hello' });
-    expect(data.total).toBeGreaterThanOrEqual(4);
+    expect(data.total).toBeGreaterThanOrEqual(5);
   });
 });
 

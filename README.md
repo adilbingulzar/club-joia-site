@@ -145,7 +145,7 @@ still open the full site with `?dev=<MAINTENANCE_KEY>`.
   script, self-hosted fonts and images). Its text is in `index.html`.
 - `app/api/preregister/route.ts`, `lib/preregister.ts` — its form: checks, saving, emails. Was the
   package's `register.php`; now `pre_registrations` in the same database (one row per
-  email: a repeat updates it). Spam protection as before: a hidden field bots fill in, a minimum fill
+  submission, the same email may come several times). Spam protection as before: a hidden field bots fill in, a minimum fill
   time of 3 seconds, only from this site's own page, 5 submissions per hour per connection (an
   anonymised code, `shop_registration_attempts`; the IP address itself is never stored).
 - Emails: the team (`PREREG_NOTIFY_EMAIL`) about each one, the guest a short confirmation.

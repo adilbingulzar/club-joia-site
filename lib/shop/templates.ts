@@ -4,7 +4,7 @@
  *   failed     "One more step to join us", after a declined or cancelled payment
  * and the pre-registration page's (lib/preregister.ts), in the same design:
  *   preregisterGuest  "Your CLUB JOIA 300 pre-registration", to the guest
- *   preregisterTeam   "New / Updated pre-registration: <name>", every detail, to PREREG_NOTIFY_EMAIL
+ *   preregisterTeam   "New / Repeat pre-registration: <name>", every detail, to PREREG_NOTIFY_EMAIL
  * Each is { subject, html, text }. Images from this site's /shop/email (public/shop/email).
  */
 import { shopConfig as config } from './config';
@@ -172,7 +172,7 @@ export function preregisterGuest(r: PreRegistration, phone: string): Mail {
   };
 }
 
-export function preregisterTeam(r: PreRegistration, updated: boolean, phone: string): Mail {
+export function preregisterTeam(r: PreRegistration, again: boolean, phone: string): Mail {
   const name = r.firstName + ' ' + r.lastName;
   const details: [string, string][] = [
     ['Name', esc(name)],
@@ -184,10 +184,10 @@ export function preregisterTeam(r: PreRegistration, updated: boolean, phone: str
     ['Marketing emails', r.marketing ? 'Yes' : 'No'],
     ['Consent to be contacted', 'Yes, ' + esc(r.consentAt)]
   ];
-  const title = (updated ? 'Updated' : 'New') + ' pre-registration';
+  const title = (again ? 'Repeat' : 'New') + ' pre-registration';
   const body =
-    '<p style="' + P + 'margin-bottom:26px;">' + (updated
-      ? esc(name) + ' had pre-registered before with this email; the details below replace the earlier ones.'
+    '<p style="' + P + 'margin-bottom:26px;">' + (again
+      ? esc(name) + ' has pre-registered again with this email; the earlier submissions are kept too.'
       : esc(name) + ' has pre-registered on clubjoia300.com.') + '</p>\n' +
     rows(details) +
     '<p style="margin:0 0 8px;font-size:15px;line-height:22px;color:#a6a6a6;">Message</p>\n' +
@@ -195,7 +195,7 @@ export function preregisterTeam(r: PreRegistration, updated: boolean, phone: str
   return {
     subject: title + ': ' + name,
     html: layout(title, body, phone, false),
-    text: (updated ? name + ' had pre-registered before with this email; the details below replace the earlier ones.' : name + ' has pre-registered on clubjoia300.com.') + '\n\n' +
+    text: (again ? name + ' has pre-registered again with this email; the earlier submissions are kept too.' : name + ' has pre-registered on clubjoia300.com.') + '\n\n' +
       details.map(function (d, i) { return d[0] + ': ' + [name, r.email, r.phone, r.country, r.tier, r.source || '–', r.marketing ? 'Yes' : 'No', 'Yes, ' + r.consentAt][i]; }).join('\n') +
       '\n\nMessage:\n' + (r.message || '–') + '\n'
   };
