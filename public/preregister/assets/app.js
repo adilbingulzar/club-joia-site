@@ -38,7 +38,7 @@
     last_name: "Please enter your last name.",
     email: "Please enter a valid email address.",
     phone: "Please enter your mobile number, including the country code.",
-    country: "Please enter your country of residence.",
+    country: "Please select your country of residence.",
     tier_interest: "Please choose a membership.",
     consent: "Please agree so we can contact you about your pre-registration.",
   };

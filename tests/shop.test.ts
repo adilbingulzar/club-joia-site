@@ -373,13 +373,16 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
       return { status: r.status, body: await r.json() };
     };
     const good = {
-      first_name: 'Reg', last_name: 'Tester', email: who.toUpperCase(), phone: '+971 50 123 4567', country: 'UAE',
+      first_name: 'Reg', last_name: 'Tester', email: who.toUpperCase(), phone: '+971 50 123 4567', country: 'United Arab Emirates',
       tier_interest: 'Ultra Black', source: 'Instagram', message: '=1+1 hello', consent: 'on', started: String(stamp - 10000), website: ''
     };
 
     const bad = await send({ first_name: '', email: 'x', phone: '12', tier_interest: 'Gold', started: String(stamp - 10000) });
     expect(bad.status).toBe(422);
     expect(Object.keys(bad.body.fields).sort()).toEqual(['consent', 'country', 'email', 'first_name', 'last_name', 'phone', 'tier_interest']);
+    // only a country of the form's list (lib/countries)
+    const unknown = await send(Object.assign({}, good, { country: 'Atlantis' }));
+    expect([unknown.status, Object.keys(unknown.body.fields)]).toEqual([422, ['country']]);
     expect((await send(good, { Origin: 'https://evil.example' })).status).toBe(403);
     // bots: the hidden field, or too fast: a pretended success, nothing saved
     expect((await send(Object.assign({}, good, { website: 'spam' }))).body).toEqual({ ok: true });
@@ -390,7 +393,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect(await send(Object.assign({}, good, { tier_interest: 'Ruby Red', marketing: 'on' }))).toEqual({ status: 200, body: { ok: true } });
     const rows = (await pool.query('SELECT * FROM pre_registrations WHERE email = $1', [who])).rows;
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ first_name: 'Reg', tier_interest: 'Ruby Red', marketing_opt_in: 1, country: 'UAE' });
+    expect(rows[0]).toMatchObject({ first_name: 'Reg', tier_interest: 'Ruby Red', marketing_opt_in: 1, country: 'United Arab Emirates' });
     expect(rows[0].ip_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(rows[0])).not.toContain(ip);
     const log = mails.join('\n');

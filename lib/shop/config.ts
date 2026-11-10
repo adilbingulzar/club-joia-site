@@ -40,9 +40,11 @@ export const shopConfig = {
   },
 
   email: {
-    // "smtp" sends, anything else only writes the email to the log
+    // "postmark" or "smtp" sends, anything else only writes the email to the log
     get driver() { return env('EMAIL_DRIVER') || 'console'; },
     get from() { return env('EMAIL_FROM'); },
-    get smtpUrl() { return env('SMTP_URL'); }
+    get smtpUrl() { return env('SMTP_URL'); },
+    get postmarkToken() { return env('POSTMARK_SERVER_TOKEN'); },
+    get postmarkStream() { return env('POSTMARK_MESSAGE_STREAM') || 'outbound'; }
   }
 };

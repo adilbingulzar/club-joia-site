@@ -148,3 +148,5 @@ textarea { resize: vertical; min-height: 96px; }
 .check > .field-error { flex-basis: 100%; margin: -4px 0 0 34px; }
 /* the small note in a label ("with country code") keeps the label one line high, so fields side by side line up */
 .field label small { line-height: 1; }
+/* a field beside a taller one (its error shown) stays at the top, its box its own height */
+.field { align-content: start; }

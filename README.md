@@ -123,8 +123,11 @@ SHOP_ADMIN_KEY=long-random-text             # 16+ characters: the key of the tic
 TELR_STORE_ID=...                           # Telr: Integrations > Hosted Payment Page > Request Authentication
 TELR_AUTH_KEY=...
 TELR_TEST=1                                 # 1 test payments, 0 live
-EMAIL_DRIVER=smtp                           # smtp sends the emails, console only writes them to the log
-SMTP_URL=smtp://user:pass@host:587
+EMAIL_DRIVER=postmark                       # postmark sends the emails through Postmark, smtp through SMTP_URL, console only writes them to the log
+EMAIL_FROM="CLUB JOIA 300 <noreply@clubjoia300.com>"   # must be a confirmed Sender Signature (or verified domain) in Postmark
+POSTMARK_SERVER_TOKEN=...                   # Postmark: Servers > <server> > API Tokens; the server's IP must be in Postmark's IP allow list
+POSTMARK_MESSAGE_STREAM=outbound            # optional, default outbound
+SMTP_URL=smtp://user:pass@host:587          # only for EMAIL_DRIVER=smtp
 EMAIL_FROM="CLUB JOIA 300 <noreply@tiqs.com>"
 PREREG_NOTIFY_EMAIL=team@example.com         # optional: the team inbox told about each pre-registration
 PREREG_SEND_CONFIRMATION=1                  # optional: 0 sends the guest no "we received it" email

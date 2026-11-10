@@ -10,6 +10,7 @@
 import crypto from 'node:crypto';
 import { db } from './shop/db';
 import { send } from './shop/email';
+import { countries } from './countries';
 import { shopConfig } from './shop/config';
 import { preregisterGuest, preregisterTeam, type PreRegistration } from './shop/templates';
 
@@ -56,7 +57,7 @@ export async function preregister(s: Submission): Promise<Reply> {
   if (!r.last_name) errors.last_name = 'Please enter your last name.';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(r.email)) errors.email = 'Please enter a valid email address.';
   if (!/^\+?[\d\s().-]{7,32}$/.test(r.phone) || r.phone.replace(/\D/g, '').length < 7) errors.phone = 'Please enter your mobile number, including the country code.';
-  if (!r.country) errors.country = 'Please enter your country of residence.';
+  if (!countries.some(function (c) { return c.name === r.country; })) errors.country = 'Please select your country of residence.';
   if (TIERS.indexOf(r.tier_interest) < 0) errors.tier_interest = 'Please choose a membership.';
   if (!consent) errors.consent = 'Please agree so we can contact you about your pre-registration.';
   if (Object.keys(errors).length) return { status: 422, body: { ok: false, error: 'Please check the highlighted fields.', fields: errors } };
