@@ -5,7 +5,7 @@ const BUYER = {
   firstName: 'Test', lastName: 'Buyer', email: 'Test@Example.com', repeatEmail: 'test@example.com',
   address: 'Mall Road 1', zipcode: '54000', city: 'Lahore', country: 'PK', gender: 'male',
   birthday: '1990-01-01', phoneCode: 'PK', phone: '300 123-4567',
-  sms: false, over21: true, terms: true
+  over21: true, terms: true
 };
 
 // app/api/checkout uses lib/catalog, which keeps its answer: a fresh copy for every test
@@ -14,6 +14,8 @@ async function checkout(buyer: Record<string, unknown> = {}, items: unknown[] = 
   const { POST } = await import('@/app/api/checkout/route');
   const res = await POST(new Request('http://site.test/api/checkout', {
     method: 'POST',
+    // the buyer's address as a proxy in front of the site passes it
+    headers: { 'X-Forwarded-For': '203.0.113.7, 10.0.0.1' },
     body: JSON.stringify({ items, buyer: { ...BUYER, ...buyer } })
   }));
   return { status: res.status, body: await res.json() };
@@ -31,7 +33,7 @@ describe('checkout', function () {
     expect(Object.fromEntries(alfred.sent('Api/Eventsnew/buyTickets')!)).toEqual({
       name: 'Test', surname: 'Buyer', email: 'test@example.com',
       address: 'Mall Road 1', zipcode: '54000', city: 'Lahore', country: 'pakistan',
-      gender: 'male', age: '1990-01-01', countryPhoneCode: '92', phoneNumber: '3001234567',
+      gender: 'male', age: '1990-01-01', countryPhoneCode: '92', phoneNumber: '3001234567', ip: '203.0.113.7',
       'tickets[0][ticketId]': TICKET_IDS['Ruby Red, Friday & Saturday'], 'tickets[0][quantity]': '2'
     });
   });
@@ -46,12 +48,14 @@ describe('checkout', function () {
     expect(sent.has('age')).toBe(false);
   });
 
-  it('sends several tickets and the SMS option', async function () {
+  it('sends several tickets, no SMS option', async function () {
     const alfred = alfredMock();
     await checkout({ sms: true }, [{ id: 'ruby-red/3-days', quantity: 1 }, { id: 'ultra-black/fri-sun', quantity: 3 }]);
     const sent = alfred.sent('Api/Eventsnew/buyTickets')!;
 
-    expect(sent.get('sendTicketWithSms')).toBe('on');
+    expect(sent.has('sendTicketWithSms')).toBe(false);
+    // the ticket API's key, on every call
+    alfred.calls.forEach(function (c) { expect(c.auth).toBe('Bearer unit-test-shop-key-0123456789'); });
     expect(sent.get('tickets[0][ticketId]')).toBe(TICKET_IDS['Ruby Red, 3 days']);
     expect(sent.get('tickets[1][ticketId]')).toBe(TICKET_IDS['Ultra Black, Friday & Sunday']);
     expect(sent.get('tickets[1][quantity]')).toBe('3');

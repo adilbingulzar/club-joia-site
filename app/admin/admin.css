@@ -19,6 +19,10 @@
 .adm-top{border-bottom:1px solid var(--line);background:var(--page);position:sticky;top:0;z-index:5}
 .adm-top .adm-wrap{display:flex;align-items:center;gap:16px;min-height:64px}
 .adm-top img{height:30px;width:auto;display:block}
+.adm-nav{display:flex;gap:4px}
+.adm-nav a{font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:8px}
+.adm-nav a:hover{color:var(--text);background:rgba(255,255,255,.06)}
+.adm-nav a[aria-current=page]{color:var(--text);background:rgba(255,255,255,.1)}
 .adm-top .who{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--text2);font-size:13px}
 .adm-btn{font:inherit;font-size:13px;font-weight:500;color:var(--text);background:transparent;border:1px solid rgba(255,255,255,.22);border-radius:99px;padding:7px 16px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .adm-btn:hover{background:rgba(255,255,255,.08)}
@@ -158,6 +162,9 @@
   .adm-filters .acts{width:100%}
   .adm-filters .acts .adm-btn{flex:1;justify-content:center}
   .adm-top .who span{display:none}
+  .adm-top .adm-wrap{flex-wrap:wrap;gap:6px 10px;padding-top:10px;padding-bottom:8px}
+  .adm-nav{order:3;width:100%;margin-left:-8px}
+  .adm-nav a{padding:6px 8px;font-size:13px}
   .adm-dl{grid-template-columns:110px 1fr}
   .adm-bar{grid-template-columns:minmax(90px,36%) 1fr}
 }

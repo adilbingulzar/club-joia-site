@@ -14,12 +14,12 @@ export type Buyer = {
   firstName: string; lastName: string; email: string; repeatEmail: string;
   address: string; zipcode: string; city: string; country: string; gender: string;
   day: string; month: string; year: string; phoneCode: string; phone: string;
-  sms: boolean; over21: boolean; terms: boolean;
+  over21: boolean; terms: boolean;
 };
 
 export const EMPTY_BUYER: Buyer = {
   firstName: '', lastName: '', email: '', repeatEmail: '', address: '', zipcode: '', city: '',
-  country: '', gender: '', day: '', month: '', year: '', phoneCode: '', phone: '', sms: false, over21: false, terms: false
+  country: '', gender: '', day: '', month: '', year: '', phoneCode: '', phone: '', over21: false, terms: false
 };
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -102,7 +102,6 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
   const [tried, setTried] = useState(false);
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({});
   const errors = validate(buyer);
-  const smsFee = buyer.sms ? cfg.payment.smsFee : 0;
   const dob = birthday(buyer);
   const birthdayFilled = !!(buyer.day && buyer.month && buyer.year);
 
@@ -204,7 +203,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
           firstName: buyer.firstName, lastName: buyer.lastName, email: buyer.email, repeatEmail: buyer.repeatEmail,
           address: buyer.address, zipcode: buyer.zipcode, city: buyer.city, country: buyer.country,
           gender: buyer.gender, birthday: dob, phoneCode: buyer.phoneCode, phone: buyer.phone,
-          sms: buyer.sms, over21: buyer.over21, terms: buyer.terms
+          over21: buyer.over21, terms: buyer.terms
         },
         successUrl: pageUrl('/thank-you'),
         cancelUrl: pageUrl('/summary')
@@ -249,8 +248,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
         </table>
         <dl className="totals">
           <div><dt>Tickets</dt><dd id="count">{n + (n === 1 ? ' ticket' : ' tickets')}</dd></div>
-          {smsFee > 0 && <div><dt>Tickets via SMS</dt><dd>{money(smsFee)}</dd></div>}
-          <div className="grand"><dt>Total</dt><dd id="total">{money(cart.total + smsFee)}</dd></div>
+          <div className="grand"><dt>Total</dt><dd id="total">{money(cart.total)}</dd></div>
         </dl>
 
         <form className="buyer" noValidate onSubmit={function (e) { pay(e, lines); }}>
@@ -315,12 +313,6 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
             <input type="checkbox" checked disabled />
             <span>Receive my tickets on {buyer.email.trim() || 'my email'}</span>
           </label>
-          {/* Hidden for now: tickets by SMS
-          <label className="check">
-            <input type="checkbox" name="sms" checked={buyer.sms} onChange={function (e) { set('sms', e.target.checked); }} />
-            <span>Also receive tickets via SMS ({money(cfg.payment.smsFee)})</span>
-          </label>
-          */}
           <label className={'check' + (error('over21') ? ' invalid' : '')}>
             <input type="checkbox" id="over21" name="over21" required checked={buyer.over21} disabled={!!dob} {...invalid('over21')} onChange={function (e) { set('over21', e.target.checked); }} />
             <span>I am older than 21{errorText('over21')}</span>

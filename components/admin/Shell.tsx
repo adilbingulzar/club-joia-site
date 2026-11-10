@@ -4,12 +4,15 @@ import { logout } from '@/app/admin/actions';
 import type { AdminUser } from '@/lib/admin/session';
 import { statusOf } from '@/lib/admin/format';
 
-export function TopBar({ user }: { user: AdminUser }) {
+export function TopBar({ user, active = 'sales' }: { user: AdminUser; active?: 'sales' | 'registrations' }) {
   return (
     <header className="adm-top">
       <div className="adm-wrap">
         <Link href="/admin" aria-label="Sales dashboard"><img src="/assets/img/logo.png" alt="Club JOIA 300" /></Link>
-        <strong>Sales</strong>
+        <nav className="adm-nav" aria-label="Dashboard">
+          <Link href="/admin" aria-current={active === 'sales' ? 'page' : undefined}>Sales</Link>
+          <Link href="/admin/registrations" aria-current={active === 'registrations' ? 'page' : undefined}>Pre-registrations</Link>
+        </nav>
         <div className="who">
           <span>{user.name} · {user.email}</span>
           <form action={logout}><button className="adm-btn" type="submit">Sign out</button></form>

@@ -14,7 +14,7 @@ import { isOver21, UNDER_21 } from '@/lib/age';
 type Buyer = {
   firstName: string; lastName: string; email: string; repeatEmail: string;
   address: string; zipcode: string; city: string; country: string; gender: string;
-  birthday: string; phoneCode: string; phone: string; sms: boolean; over21: boolean; terms: boolean;
+  birthday: string; phoneCode: string; phone: string; over21: boolean; terms: boolean;
 };
 
 class CheckoutError extends Error {}
@@ -36,7 +36,7 @@ function readBuyer(raw: Record<string, unknown>): Buyer {
     address: text(raw.address, 200), zipcode: text(raw.zipcode, 20), city: text(raw.city),
     country: text(raw.country, 2), gender: text(raw.gender, 10), birthday: text(raw.birthday, 10),
     phoneCode: text(raw.phoneCode, 2), phone: text(raw.phone, 20).replace(/[\s\-()]/g, ''),
-    sms: raw.sms === true, over21: raw.over21 === true, terms: raw.terms === true
+    over21: raw.over21 === true, terms: raw.terms === true
   };
 
   if (!b.firstName || !b.lastName || !b.address || !b.zipcode || !b.city) throw new CheckoutError('Please fill in all fields.');
@@ -112,12 +112,13 @@ export async function POST(request: Request) {
       // lowercase name, as Alfred's own shop sends it. Alfred's payment gateway table goes by it.
       country: buyerCountry.name.toLowerCase(),
       countryPhoneCode: country(buyer.phoneCode)!.dial,
-      phoneNumber: buyer.phone
+      phoneNumber: buyer.phone,
+      // the buyer's address, for the ticket API's limit on unpaid orders
+      ip: (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || request.headers.get('x-real-ip') || ''
     };
     // Left out when empty: Alfred's age column is a date and can't hold an empty text.
     if (buyer.gender) form.gender = buyer.gender;
     if (buyer.birthday) form.age = buyer.birthday;
-    if (buyer.sms) form.sendTicketWithSms = 'on';
 
     body.items.slice(0, cfg.tickets.length).forEach(function (item: { id?: unknown; quantity?: unknown }, i: number) {
       const t = ticket(String(item && item.id));

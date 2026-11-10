@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CLUB JOIA 300 · Pre-register · Abu Dhabi Grand Prix</title>
+<meta name="description" content="An exclusive trackside mega yacht experience at the Abu Dhabi Grand Prix, 4, 5 & 6 December. Membership is limited to 300 and by invitation only. Pre-register now.">
+<meta name="theme-color" content="#050505">
+<meta property="og:title" content="CLUB JOIA 300 · Abu Dhabi Grand Prix">
+<meta property="og:description" content="An exclusive trackside mega yacht experience. 300 members. By invitation only. Pre-register now.">
+<meta property="og:image" content="/preregister/assets/img/og-image.jpg">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/preregister/assets/img/icon-192.png">
+<link rel="apple-touch-icon" href="/preregister/assets/img/apple-touch-icon.png">
+<link rel="preload" href="/preregister/assets/img/hero-yacht.webp" as="image">
+<link rel="stylesheet" href="/preregister/assets/styles.css">
+</head>
+<body>
+
+<header class="nav" id="nav">
+  <a href="#top" class="nav-logo" aria-label="CLUB JOIA 300 home"><img src="/preregister/assets/img/logo-white.png" alt="CLUB JOIA 300" width="132" height="33"></a>
+  <a href="#register" class="btn btn-small">Pre-register</a>
+</header>
+
+<main id="top">
+  <!-- HERO -->
+  <section class="hero">
+    <img class="hero-img" src="/preregister/assets/img/hero-yacht.webp" alt="A mega yacht moored beside the Yas Marina Circuit at sunset, with a Formula One car on track" fetchpriority="high">
+    <div class="hero-shade"></div>
+    <div class="brand">
+      <img class="brand-logo" src="/preregister/assets/img/logo-white.png" alt="CLUB JOIA 300" width="320" height="80">
+      <p class="tagline">The ultimate Grand Prix mega yacht experience</p>
+    </div>
+    <div class="hero-inner">
+      <p class="eyebrow">Abu Dhabi Grand Prix · December 4, 5 &amp; 6</p>
+      <h1>An exclusive trackside <em>mega yacht</em> experience</h1>
+      <p class="hero-lead">Three hundred members. One weekend on the water at Yas Marina Circuit. Membership by invitation only.</p>
+      <div class="hero-cta">
+        <a href="#register" class="btn">Pre-register now</a>
+      </div>
+    </div>
+    <a href="#register" class="scroll-cue" aria-label="Scroll down"><span></span></a>
+  </section>
+
+  <!-- REGISTER -->
+  <section class="register" id="register" aria-labelledby="register-title">
+    <div class="register-intro">
+      <p class="eyebrow ruby">Pre-registration</p>
+      <h2 class="display" id="register-title">Get your <em>access</em></h2>
+      <p class="lead">Pre-registering does not commit you to anything. Our team reviews every request and contacts each guest personally.</p>
+      <ol class="steps">
+        <li><span>01</span>Pre-register below</li>
+        <li><span>02</span>Our team contacts you personally</li>
+        <li><span>03</span>Receive your invitation and member card</li>
+      </ol>
+    </div>
+
+    <form class="form" id="form" action="/api/preregister" method="post" novalidate>
+      <div class="row">
+        <div class="field"><label for="first_name">First name</label><input id="first_name" name="first_name" autocomplete="given-name" required maxlength="80"></div>
+        <div class="field"><label for="last_name">Last name</label><input id="last_name" name="last_name" autocomplete="family-name" required maxlength="80"></div>
+      </div>
+      <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="190"></div>
+      <div class="row">
+        <div class="field"><label for="phone">Mobile <small>with country code</small></label><input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="+971 50 123 4567" required maxlength="32"></div>
+        <div class="field"><label for="country">Country of residence</label><input id="country" name="country" autocomplete="country-name" required maxlength="80"></div>
+      </div>
+      <fieldset class="field tiers-pick">
+        <legend>Membership of interest</legend>
+        <div class="chips">
+          <label><input type="radio" name="tier_interest" value="Ruby Red" required><span><i class="dot ruby-red"></i>Ruby Red</span></label>
+          <label><input type="radio" name="tier_interest" value="Pearly White"><span><i class="dot pearly-white"></i>Pearly White</span></label>
+          <label><input type="radio" name="tier_interest" value="Ultra Black"><span><i class="dot ultra-black"></i>Ultra Black</span></label>
+          <label><input type="radio" name="tier_interest" value="Not sure yet"><span>Not sure yet</span></label>
+        </div>
+      </fieldset>
+      <div class="field">
+        <label for="source">How did you hear about us? <small>optional</small></label>
+        <select id="source" name="source">
+          <option value="">Choose…</option>
+          <option>Personal invitation</option>
+          <option>Friend or member</option>
+          <option>Instagram</option>
+          <option>LinkedIn</option>
+          <option>Event or partner</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="field"><label for="message">Message <small>optional</small></label><textarea id="message" name="message" rows="3" maxlength="1000"></textarea></div>
+
+      <!-- Spam protection: hidden from people, bots fill it in. -->
+      <div class="hp" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+      <input type="hidden" name="started" id="started">
+
+      <label class="check"><input type="checkbox" name="consent" required><span>I agree that CLUB JOIA 300 may store my details and contact me about my pre-registration, as described in the <a href="/preregister/privacy.html" target="_blank" rel="noopener">privacy notice</a>.</span></label>
+      <label class="check"><input type="checkbox" name="marketing"><span>Keep me informed about future CLUB JOIA 300 events. <small>optional</small></span></label>
+
+      <p class="form-error" id="form-error" role="alert" hidden></p>
+      <button type="submit" class="btn btn-block" id="submit">Submit pre-registration</button>
+    </form>
+
+    <div class="thanks" id="thanks" hidden tabindex="-1">
+      <img src="/preregister/assets/img/logo-white.png" alt="" width="200" height="50">
+      <h2 class="display">Thank you, <em id="thanks-name">guest</em>.</h2>
+      <p class="lead">Your pre-registration has been received. Our team will contact you personally. Please keep an eye on your inbox and phone.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <img src="/preregister/assets/img/logo-white.png" alt="CLUB JOIA 300" width="150" height="37">
+  <p>Abu Dhabi Grand Prix · Yas Marina Circuit · December 4, 5 &amp; 6</p>
+  <p class="small">Membership is limited and by invitation only. <a href="/preregister/privacy.html">Privacy notice</a></p>
+</footer>
+
+<script src="/preregister/assets/app.js" defer></script>
+</body>
+</html>

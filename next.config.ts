@@ -2,6 +2,8 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   turbopack: { root: __dirname },
+  // the ticket shop's email (pg and @node-rs/argon2 are left out of the bundle by Next itself)
+  serverExternalPackages: ['nodemailer', 'mysql2'],
   // Old static-site addresses (shared links, payment success URLs) keep working.
   async redirects() {
     return [

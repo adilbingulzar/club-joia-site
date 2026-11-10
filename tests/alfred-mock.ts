@@ -15,7 +15,7 @@ cfg.tickets.forEach(function (t, i) { TICKET_IDS[t.name] = String(21525 + i); })
 export const PAYMENT_URL = 'http://alfred.test/booking/onlinepayment/706/0?order=KEY';
 
 export function alfredMock(answers: Record<string, Answer | null> = {}, pages: Record<string, Page> = {}) {
-  const calls: { path: string; data: URLSearchParams }[] = [];
+  const calls: { path: string; data: URLSearchParams; auth: string }[] = [];
   const all: Record<string, Answer | null> = {
     'Api/Eventsnew/buyTicketsTicketTypes': function () {
       return cfg.tickets.map(function (t) {
@@ -33,7 +33,7 @@ export function alfredMock(answers: Record<string, Answer | null> = {}, pages: R
     if (init && init.method === 'POST') {
       const path = url.replace('http://alfred.test/', '');
       const data = new URLSearchParams(String(init.body));
-      calls.push({ path, data });
+      calls.push({ path, data, auth: new Headers(init.headers).get('authorization') || '' });
       const answer = all[path];
       return answer ? Response.json(answer(data)) : new Response('', { status: 503 });
     }

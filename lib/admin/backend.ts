@@ -1,8 +1,9 @@
 /*
- * The backend's admin API (club-joia-300-white, shop/admin.cjs), server side only: at ALFRED_URL,
+ * The shop's admin API (this site's /shop/admin, lib/shop/admin.ts), server side only: at ALFRED_URL,
  * with SHOP_ADMIN_KEY as a bearer token and the signed-in staff member in X-Admin-User.
  */
 import type { AdminUser } from './session';
+import { shopKeyHeader } from '../shop/key';
 
 export class SignedOut extends Error {}
 
@@ -48,7 +49,7 @@ function base(): string {
 }
 
 function headers(user?: AdminUser): Record<string, string> {
-  const h: Record<string, string> = { Authorization: 'Bearer ' + process.env.SHOP_ADMIN_KEY };
+  const h: Record<string, string> = shopKeyHeader();
   if (user) h['X-Admin-User'] = user.id;
   return h;
 }
@@ -81,3 +82,10 @@ export async function adminLogin(email: string, password: string, ip: string): P
   }
   return { error: 'Sign-in isn’t available right now. Please try again in a moment.' };
 }
+
+// the pre-registration page's sign-ups (/shop/admin/registrations)
+export type Registration = {
+  createdAt: string; updatedAt: string; firstName: string; lastName: string; email: string; phone: string;
+  country: string; tier: string; source: string; message: string; marketing: boolean;
+};
+export type Registrations = { total: number; byTier: Record<string, number>; registrations: Registration[] };

@@ -136,9 +136,6 @@ export const CJ_CONFIG = {
     // Our own route (app/api/checkout) that books the order in Alfred, see README.
     checkoutEndpoint: '/api/checkout',
 
-    // Alfred's fee for also sending the tickets by SMS (TICKETING_SMS_FEE, usd).
-    smsFee: 1,
-
     /*
      * Fallback when no endpoint is set: if the order holds a single ticket,
      * the buyer is sent to that ticket's `paymentLink`. Enable

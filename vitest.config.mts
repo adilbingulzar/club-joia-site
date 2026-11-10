@@ -7,6 +7,6 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     // Alfred is never called: tests/alfred-mock.ts answers instead
-    env: { ALFRED_URL: 'http://alfred.test', ALFRED_EVENT_ID: '5263', ALFRED_VENDOR_ID: '462967' }
+    env: { ALFRED_URL: 'http://alfred.test', ALFRED_EVENT_ID: '5263', ALFRED_VENDOR_ID: '462967', SHOP_ADMIN_KEY: 'unit-test-shop-key-0123456789' }
   }
 });
