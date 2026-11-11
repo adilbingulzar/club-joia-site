@@ -160,14 +160,14 @@ export function preregisterGuest(r: PreRegistration, phone: string): Mail {
   const body =
     '<p style="' + P + '">Dear ' + esc(r.firstName) + ',</p>\n' +
     '<p style="' + P + '">Thank you for pre-registering for Club JOIA 300.</p>\n' +
-    '<p style="' + P + 'margin-bottom:26px;">Membership is limited to 300 members and is by invitation only. Our team will review your pre-registration and contact you personally.</p>\n' +
+    '<p style="' + P + 'margin-bottom:26px;">Access is limited to 300 visitors only. Our team will review your pre-registration and contact you personally.</p>\n' +
     rows([['Name', esc(r.firstName + ' ' + r.lastName)], ['Membership interest', esc(r.tier)]]) +
     assistance(phone);
   return {
     subject: 'Your CLUB JOIA 300 pre-registration',
     html: layout(title, body, phone),
     text: 'Dear ' + r.firstName + ',\n\nThank you for pre-registering for Club JOIA 300.\n\n' +
-      'Membership is limited to 300 members and is by invitation only. Our team will review your pre-registration and contact you personally.\n\n' +
+      'Access is limited to 300 visitors only. Our team will review your pre-registration and contact you personally.\n\n' +
       'Name: ' + r.firstName + ' ' + r.lastName + '\nMembership interest: ' + r.tier + '\n\n' + textEnd(phone)
   };
 }
