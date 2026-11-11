@@ -3,9 +3,11 @@
  *
  * Only this site's server calls it: every request carries SHOP_ADMIN_KEY as a bearer token, and
  * every request but the login names the signed-in staff member (X-Admin-User), who must still be
- * an active admin of the members app. Staff sign in with their members app email and password.
+ * an active admin of the members app. Staff sign in with their members app email and password,
+ * plus the code of the authenticator app they set up in the members app's staff portal
+ * (two-factor sign-in, lib/shop/totp.ts; each code works once, in either app).
  *
- *   POST /shop/admin/login           { email, password, ip }  -> { user } or 401 { error }
+ *   POST /shop/admin/login           { email, password, code, ip }  -> { user } or 401/403 { error }
  *   GET  /shop/admin/stats?<filters>                          -> figures and chart data
  *   GET  /shop/admin/orders?<filters>&page&perPage            -> { total, orders }
  *   GET  /shop/admin/orders/<ref>                             -> { order }
@@ -18,6 +20,7 @@ import { shopConfig as config } from './config';
 import { cuid, db } from './db';
 import { hasShopKey, shopKey } from './key';
 import { products } from './products';
+import { decryptTotpSecret, matchTotp } from './totp';
 
 const ROLES = ['ADMIN', 'SUPER_ADMIN'];
 const STATUSES = ['pending', 'paid', 'declined', 'cancelled', 'failed'];
@@ -51,13 +54,45 @@ async function login(request: Request): Promise<Answer> {
     return answer(429, { error: 'Too many attempts. Please wait a few minutes and try again.' });
   }
 
-  const user = (await db.query('SELECT id, email, name, role, status, password_hash FROM users WHERE email = $1', [email])).rows[0];
+  const user = (await db.query('SELECT id, email, name, role, status, password_hash, mfa_enabled, mfa_secret_encrypted FROM users WHERE email = $1', [email])).rows[0];
   // the members app's Argon2id hashes
   const ok = user && user.password_hash && await verify(user.password_hash, password).catch(function () { return false; });
   if (!ok || user.status !== 'ACTIVE' || ROLES.indexOf(user.role) < 0) {
     await failed(['email:' + email, 'ip:' + ip]);
     // the same answer for a wrong password, an unknown email or a non-admin account
     return answer(401, { error: 'Email or password is incorrect, or this account has no access to sales.' });
+  }
+
+  // two-factor sign-in: the authenticator is set up in the members app's staff portal
+  if (!config.mfaKey) {
+    console.error('[shop] admin sign-in: MFA_ENCRYPTION_KEY is not set');
+    return answer(403, { error: 'Two-factor sign-in is not configured on this server yet. Please contact the site administrator.' });
+  }
+  if (!Number(user.mfa_enabled) || !user.mfa_secret_encrypted) {
+    return answer(403, { error: 'Set up two-factor sign-in first: sign in once to the CLUB JOIA staff portal, which shows how, then sign in here.' });
+  }
+  const code = String(body.code || '').replace(/\s/g, '').slice(0, 10);
+  if (!code) return answer(401, { error: 'Enter the 6-digit code from your authenticator app.' });
+  let secret = '';
+  try {
+    secret = decryptTotpSecret(user.mfa_secret_encrypted, config.mfaKey);
+  } catch (e) {
+    console.error('[shop] admin sign-in: authenticator secret of ' + user.id + ' does not open with MFA_ENCRYPTION_KEY', e);
+    return answer(403, { error: 'Your authenticator can’t be checked. Please ask a super admin to reset two-factor sign-in for your account.' });
+  }
+  const step = matchTotp(secret, code);
+  // a code works once (the members app keeps the same mark): claim its time step
+  const claimed = step !== null && (await db.query(
+    'UPDATE users SET mfa_last_used_step = $1 WHERE id = $2 AND (mfa_last_used_step IS NULL OR mfa_last_used_step < $1)',
+    [step, user.id]
+  )).affectedRows === 1;
+  if (!claimed) {
+    await failed(['email:' + email, 'ip:' + ip]);
+    await db.query(
+      'INSERT INTO audit_logs (id, actor_user_id, action, entity_type, entity_id, ip_address) VALUES ($1, $2, $3, $4, $5, $6)',
+      [cuid(), user.id, 'shop.dashboard_mfa_failed', 'user', user.id, ip === 'unknown' ? null : ip]
+    );
+    return answer(401, { error: 'The code is not correct. Enter the current 6-digit code from your authenticator app.' });
   }
   await db.query(
     'INSERT INTO audit_logs (id, actor_user_id, action, entity_type, entity_id, ip_address) VALUES ($1, $2, $3, $4, $5, $6)',
@@ -70,8 +105,9 @@ async function login(request: Request): Promise<Answer> {
 async function staff(request: Request) {
   const id = String(request.headers.get('x-admin-user') || '');
   if (!id) return null;
-  const u = (await db.query('SELECT id, role, status FROM users WHERE id = $1', [id])).rows[0];
-  return u && u.status === 'ACTIVE' && ROLES.indexOf(u.role) >= 0 ? u : null;
+  const u = (await db.query('SELECT id, role, status, mfa_enabled FROM users WHERE id = $1', [id])).rows[0];
+  // a reset authenticator (lost phone) ends the dashboard sessions too
+  return u && u.status === 'ACTIVE' && ROLES.indexOf(u.role) >= 0 && Number(u.mfa_enabled) ? u : null;
 }
 
 function date(v: string | null): string | null {

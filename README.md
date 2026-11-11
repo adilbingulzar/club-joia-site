@@ -109,6 +109,7 @@ All settings are in one file, `.env` (or the server's environment), in blocks wi
 
 ```bash
 ALFRED_UAE_URL=https://tiqs.it              # optional: old Alfred ticket emails' links (PDF, QR) keep working; read at build time
+IP_ALLOWLIST="127.0.0.1, ::1"               # optional: only these addresses/ranges reach the site at all (pages, APIs, files, Telr's callbacks: add Telr's IPs); others get 403. Empty = off. Uses the last X-Forwarded-For entry, so the site must listen on 127.0.0.1 behind nginx (lib/ip-allowlist.ts)
 MAINTENANCE_MODE=true                       # optional: visitors get the pre-registration page (below); /admin, the ticket shop's routes and ticket email links stay open; restart to apply
 MAINTENANCE_KEY=long-random-text            # optional: developers open the site once with ?dev=<this key> during maintenance
 
@@ -120,6 +121,7 @@ SHOP_SUPPORT_PHONE="+971 ..."               # the phone in the emails, else the 
 SHOP_ALT_PAYMENT_URL=                       # optional: "Alternative payment option", default <SHOP_SITE_URL>/tickets
 SHOP_TIMEZONE=Asia/Dubai                    # optional: the sales dashboard's days
 SHOP_ADMIN_KEY=long-random-text             # 16+ characters: the key of the ticket and dashboard APIs, and the dashboard cookie's
+MFA_ENCRYPTION_KEY=...                      # the members app's MFA_ENCRYPTION_KEY, same value: dashboard sign-in checks the admins' authenticator codes
 TELR_STORE_ID=...                           # Telr: Integrations > Hosted Payment Page > Request Authentication
 TELR_AUTH_KEY=...
 TELR_TEST=1                                 # 1 test payments, 0 live
@@ -158,7 +160,9 @@ DPO@clubjoia300.com; retention: 180 days from the date of delivery.)
 
 ## Sales dashboard (/admin)
 
-Ticket orders with figures, charts, filters, an order list, each order's detail and a CSV export, read only. Staff sign in with their account of the members app (admins only, Argon2 password in its `users` table): the shop's admin API checks it (`/shop/admin/login`), this site keeps a signed cookie for 12 hours. Every page asks the API again, so a staff member disabled in the members app is signed out here. Sign-ins go to its audit log (`shop.dashboard_sign_in`).
+Ticket orders with figures, charts, filters, an order list, each order's detail and a CSV export, read only. Staff sign in with their account of the members app (admins only, Argon2 password in its `users` table) **and the 6-digit code of their authenticator app** (two-factor sign-in): the shop's admin API checks both (`/shop/admin/login`), this site keeps a signed cookie for 12 hours. Every page asks the API again, so a staff member disabled in the members app, or whose two-factor sign-in was reset there, is signed out here. Sign-ins and wrong codes go to its audit log (`shop.dashboard_sign_in`, `shop.dashboard_mfa_failed`).
+
+Two-factor sign-in: admins set up the authenticator in the members app's staff portal (it asks at their first sign-in there); this site has no set-up of its own. `lib/shop/totp.ts` is a copy of the members app's `src/lib/security/totp.ts`, and `MFA_ENCRYPTION_KEY` must be the same in both apps. Each code works once, in either app (`users.mfa_last_used_step`, added by the members app's migration `20261111120000_mfa_last_used_step`).
 
 - `app/admin/` — the dashboard (`page.tsx`), sign-in (`login/`, `actions.ts`), an order (`orders/[ref]/`), the CSV (`export/route.ts`).
 - `lib/admin/` — session cookie, API calls, filters (days in Dubai time), formats, CSV. `components/admin/` — charts and shared pieces.

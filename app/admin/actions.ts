@@ -1,7 +1,8 @@
 'use server';
 /*
- * Sign-in and sign-out of the sales dashboard. The backend checks the email and password against
- * its staff accounts (admins only), the site keeps the signed cookie (lib/admin/session).
+ * Sign-in and sign-out of the sales dashboard. The backend checks the email, password and
+ * authenticator code against its staff accounts (admins only), the site keeps the signed cookie
+ * (lib/admin/session).
  */
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -13,11 +14,14 @@ export type LoginState = { error?: string; email?: string } | undefined;
 export async function login(_state: LoginState, form: FormData): Promise<LoginState> {
   const email = String(form.get('email') || '').trim().slice(0, 150);
   const password = String(form.get('password') || '').slice(0, 200);
+  // the 6-digit code of the authenticator app set up in the staff portal (two-factor sign-in)
+  const code = String(form.get('code') || '').replace(/\s/g, '').slice(0, 10);
   if (!email || !password) return { error: 'Enter your email and password.', email };
+  if (!code) return { error: 'Enter the 6-digit code from your authenticator app.', email };
 
   const h = await headers();
   const ip = (h.get('x-forwarded-for') || '').split(',')[0].trim() || h.get('x-real-ip') || 'unknown';
-  const result = await adminLogin(email, password, ip);
+  const result = await adminLogin(email, password, code, ip);
   if (!result.user) return { error: result.error, email };
 
   const proto = (h.get('x-forwarded-proto') || '').split(',')[0].trim();

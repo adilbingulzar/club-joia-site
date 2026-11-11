@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import nextConfig from '../next.config';
-import { config, proxy } from '../proxy';
+import { MAINTENANCE_PATHS, proxy } from '../proxy';
+import { allowed, allowlistVerdict, clientIp, parseAllowlist } from '../lib/ip-allowlist';
 
-// the same conversion as Next's for this matcher: the whole path against the one pattern
+// the whole path against the pattern, as the proxy does
 const showsMaintenance = function (path: string) {
-  return new RegExp('^' + config.matcher[0] + '$').test(path);
+  return new RegExp('^' + MAINTENANCE_PATHS + '$').test(path);
 };
 
 afterEach(function () {
@@ -125,5 +126,64 @@ describe('privacy notice', function () {
   it('is at /privacy, the old address sends there', async function () {
     expect(await nextConfig.rewrites!()).toContainEqual({ source: '/privacy', destination: '/preregister/privacy.html' });
     expect(await nextConfig.redirects!()).toContainEqual({ source: '/preregister/privacy.html', destination: '/privacy', permanent: true });
+  });
+});
+
+describe('IP allowlist', function () {
+  const visit = function (path: string, ip: string) {
+    return proxy(new NextRequest('https://club.example.com' + path, { headers: { 'x-forwarded-for': ip } }));
+  };
+
+  it('lets everyone in while IP_ALLOWLIST is empty', function () {
+    vi.stubEnv('IP_ALLOWLIST', '');
+    expect(visit('/tickets', '198.51.100.1').status).toBe(200);
+  });
+
+  it('refuses every path, files and APIs included, to other addresses', async function () {
+    vi.stubEnv('IP_ALLOWLIST', '203.0.113.7, 10.0.0.0/8, 2001:db8::/32');
+    vi.stubEnv('MAINTENANCE_MODE', 'false');
+    for (const path of ['/', '/tickets', '/admin', '/admin/login', '/api/checkout', '/api/preregister', '/Api/Eventsnew/buyTickets', '/shop/telr/advice', '/_next/static/chunks/a.js', '/assets/fonts/Outfit.woff2', '/privacy']) {
+      const r = visit(path, '198.51.100.1');
+      expect(r.status, path).toBe(403);
+      expect(await r.text()).toBe('Access denied.');
+      expect(visit(path, '203.0.113.7').status, path).toBe(200);
+    }
+    expect(visit('/', '10.20.30.40').status).toBe(200);
+    expect(visit('/', '11.0.0.1').status).toBe(403);
+    expect(visit('/', '2001:db8:1::5').status).toBe(200);
+    expect(visit('/', '2001:db9::5').status).toBe(403);
+  });
+
+  it('checks before maintenance mode', function () {
+    vi.stubEnv('IP_ALLOWLIST', '203.0.113.7');
+    vi.stubEnv('MAINTENANCE_MODE', 'true');
+    expect(visit('/', '198.51.100.1').status).toBe(403);
+    expect(visit('/', '203.0.113.7').headers.get('x-middleware-rewrite')).toBe('https://club.example.com/preregister/index.html');
+  });
+
+  it('takes the address nginx added: the last X-Forwarded-For entry', function () {
+    expect(clientIp(new Headers({ 'x-forwarded-for': '203.0.113.7, 198.51.100.1' }))).toBe('198.51.100.1');
+    // X-Real-IP is the client's to set when nginx doesn't: not used
+    expect(clientIp(new Headers({ 'x-real-ip': '198.51.100.2' }))).toBe('');
+    expect(allowlistVerdict(new Headers({ 'x-forwarded-for': '', 'x-real-ip': '203.0.113.7' }), '203.0.113.7')).toBe(false);
+    // a spoofed first entry doesn't help
+    expect(allowlistVerdict(new Headers({ 'x-forwarded-for': '203.0.113.7, 198.51.100.1' }), '203.0.113.7')).toBe(false);
+    expect(allowlistVerdict(new Headers({}), '203.0.113.7')).toBe(false);
+    expect(allowlistVerdict(new Headers({}), '')).toBeNull();
+  });
+
+  it('reads addresses and ranges, IPv4 inside IPv6 too', function () {
+    const r = parseAllowlist('127.0.0.1 ::1,192.168.1.0/24  fe80::/10 nonsense 1.2.3.4/40');
+    expect(r).toHaveLength(4);
+    expect(allowed('127.0.0.1', r)).toBe(true);
+    expect(allowed('::ffff:127.0.0.1', r)).toBe(true);
+    expect(allowed('::1', r)).toBe(true);
+    expect(allowed('[::1]', r)).toBe(true);
+    expect(allowed('192.168.1.255', r)).toBe(true);
+    expect(allowed('192.168.2.1', r)).toBe(false);
+    expect(allowed('fe80::1%eth0', r)).toBe(true);
+    expect(allowed('1.2.3.4', r)).toBe(false);
+    expect(allowed('not-an-ip', r)).toBe(false);
+    expect(allowed('', r)).toBe(false);
   });
 });

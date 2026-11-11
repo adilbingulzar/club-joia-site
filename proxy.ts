@@ -1,4 +1,8 @@
 /*
+ * Runs for every request (no matcher), files and APIs included.
+ *
+ * IP allowlist: with IP_ALLOWLIST set, only those addresses get anything, see lib/ip-allowlist.ts.
+ *
  * Maintenance: while MAINTENANCE_MODE=true visitors get the pre-registration page at / (its form:
  * app/api/preregister); every other page sends them there, other APIs answer 503.
  * Remove it or set it to false and restart the site to open it again.
@@ -7,6 +11,7 @@
  */
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { allowlistVerdict } from '@/lib/ip-allowlist';
 
 const PARAM = 'dev';
 const COOKIE = 'cj300-dev';
@@ -14,8 +19,21 @@ const COOKIE = 'cj300-dev';
 // what visitors see instead of the site: the pre-registration page (public/preregister)
 const PAGE = '/preregister/index.html';
 
+// The paths maintenance mode closes, as a whole-path pattern:
+// static build files can't reveal anything on their own and ticket emails must keep working (next.config.ts);
+// the sales dashboard (/admin, with the logo it shows) has its own sign-in;
+// the ticket shop's APIs (Api/Eventsnew, shop/) are called by this site's own server, Telr and the emails;
+// the pre-registration page (preregister/), its privacy notice (privacy) and form (api/preregister) are what visitors get;
+// everything else, API included, goes to the pre-registration page.
+export const MAINTENANCE_PATHS = '/((?!_next/static|_next/image|booking_events/pdf/|Ajaxdorian/getQrcodeImage/|uploads/qrcodes/|assets/(?!img/)|assets/img/logo\\.png$|admin(?:/|$)|Api/Eventsnew/|shop/|preregister/|privacy$|api/preregister$|ticketing/download|downloadticketpdf/).*)';
+const closesForMaintenance = new RegExp('^' + MAINTENANCE_PATHS + '$');
+
 export function proxy(request: NextRequest) {
+  if (allowlistVerdict(request.headers) === false) {
+    return new NextResponse('Access denied.', { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+  }
   if (process.env.MAINTENANCE_MODE !== 'true') return NextResponse.next();
+  if (!closesForMaintenance.test(request.nextUrl.pathname)) return NextResponse.next();
 
   const key = process.env.MAINTENANCE_KEY;
   const url = request.nextUrl;
@@ -39,11 +57,3 @@ export function proxy(request: NextRequest) {
   return NextResponse.redirect(new URL('/', request.url));
 }
 
-export const config = {
-  // Static build files can't reveal anything on their own and ticket emails must keep working (next.config.ts);
-  // the sales dashboard (/admin, with the logo it shows) has its own sign-in;
-  // the ticket shop's APIs (Api/Eventsnew, shop/) are called by this site's own server, Telr and the emails;
-  // the pre-registration page (preregister/), its privacy notice (privacy) and form (api/preregister) are what visitors get;
-  // everything else, API included, goes to the pre-registration page.
-  matcher: ['/((?!_next/static|_next/image|booking_events/pdf/|Ajaxdorian/getQrcodeImage/|uploads/qrcodes/|assets/(?!img/)|assets/img/logo\\.png$|admin(?:/|$)|Api/Eventsnew/|shop/|preregister/|privacy$|api/preregister$|ticketing/download|downloadticketpdf/).*)']
-};

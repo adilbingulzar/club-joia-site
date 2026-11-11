@@ -65,17 +65,17 @@ export async function adminGet<T>(path: string, user: AdminUser): Promise<T | nu
   return r.body as T;
 }
 
-// { user } when the API accepts the email and password, else { error } for the form
-export async function adminLogin(email: string, password: string, ip: string): Promise<{ user?: AdminUser; error?: string }> {
+// { user } when the API accepts the email, password and authenticator code, else { error } for the form
+export async function adminLogin(email: string, password: string, code: string, ip: string): Promise<{ user?: AdminUser; error?: string }> {
   try {
     const r = await call('login', {
       method: 'POST',
       headers: { ...headers(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, ip })
+      body: JSON.stringify({ email, password, code, ip })
     });
     const body = (r.body || {}) as { user?: AdminUser; error?: string };
     if (r.status === 200 && body.user) return { user: body.user };
-    if (r.status === 400 || r.status === 401 || r.status === 429) return { error: String(body.error || 'Sign-in failed.') };
+    if (r.status === 400 || r.status === 401 || r.status === 403 || r.status === 429) return { error: String(body.error || 'Sign-in failed.') };
     console.error('admin login: ' + r.status);
   } catch (e) {
     console.error('admin login:', e);

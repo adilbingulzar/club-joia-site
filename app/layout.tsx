@@ -18,9 +18,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     // data-scroll-behavior lets Next.js turn off the smooth scrolling from globals.css during page changes.
     <html lang="en" data-scroll-behavior="smooth">
-      <head>
-        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&family=Orbitron:wght@600;800&display=swap" rel="stylesheet" />
-      </head>
       <body><CatalogProvider catalog={catalog}>{children}</CatalogProvider></body>
     </html>
   );

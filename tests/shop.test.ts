@@ -13,6 +13,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import mysql from 'mysql2/promise';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { encryptTotpSecret, generateTotpSecret, totpCode, totpStep } from '@/lib/shop/totp';
 
 const DB_URL = process.env.SHOP_TEST_DATABASE_URL || '';
 const CHECK_URL = process.env.SHOP_TEST_ADMIN_DATABASE_URL || DB_URL;
@@ -20,6 +21,10 @@ const SITE = 'http://site.test';
 const EVENT = process.env.SHOP_TEST_EVENT || 'abu-dhabi-2026';
 const ADMIN_KEY = 'shop-test-admin-key-0123456789';
 const email = 'shoptest+' + Date.now() + '@example.com';
+// the seeded admin's authenticator during the test (its own settings are put back afterwards)
+const MFA_KEY = 'shop-test-mfa-key-shop-test-mfa-key-0001';
+const MFA_SECRET = generateTotpSecret();
+let adminMfa: { id: string; mfa_enabled: number; mfa_secret_encrypted: string | null; mfa_enrolled_at: string | null; mfa_last_used_step: number | null } | null = null;
 
 // ─── Stand-in Telr: create and check, POST /control sets what a check answers for a cart ───
 const telrOrders: Record<string, { cartid: string; amount: string; currency: string; test: string }> = {};
@@ -123,6 +128,15 @@ function dbEnv(address: string) {
   };
 }
 
+// the admin's current code; each code works once, so the test forgets the last one used first
+function freshCode(): string;
+function freshCode(reset: true): Promise<string>;
+function freshCode(reset?: boolean): string | Promise<string> {
+  const code = totpCode(MFA_SECRET, totpStep());
+  if (!reset) return code;
+  return raw.query('UPDATE users SET mfa_last_used_step = NULL WHERE email = ?', ['admin@joia.test']).then(function () { return code; });
+}
+
 const one = function (sql: string, params: unknown[] = []) { return pool.query(sql, params).then(function (r) { return r.rows[0]; }); };
 
 describe.skipIf(!DB_URL)('ticket shop on a database', function () {
@@ -130,7 +144,8 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     Object.assign(process.env, {
       ...dbEnv(DB_URL), SHOP_EVENT: EVENT, SHOP_CURRENCY: 'USD', SHOP_SITE_URL: SITE, SHOP_PUBLIC_URL: '',
       SHOP_ADMIN_KEY: ADMIN_KEY, TELR_STORE_ID: '1', TELR_AUTH_KEY: 'test', TELR_TEST: '1', TELR_URL: await startStub(),
-      EMAIL_DRIVER: 'console', SHOP_SUPPORT_PHONE: '+971 50 000 0000', PREREG_NOTIFY_EMAIL: 'team@example.com', PREREG_SEND_CONFIRMATION: '1'
+      EMAIL_DRIVER: 'console', SHOP_SUPPORT_PHONE: '+971 50 000 0000', PREREG_NOTIFY_EMAIL: 'team@example.com', PREREG_SEND_CONFIRMATION: '1',
+      MFA_ENCRYPTION_KEY: MFA_KEY
     });
     vi.spyOn(console, 'info').mockImplementation(function (...a: unknown[]) { mails.push(a.join(' ')); });
     vi.spyOn(console, 'error').mockImplementation(function () {});
@@ -146,9 +161,19 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
       prereg: await import('@/app/api/preregister/route')
     };
     closeDb = (await import('@/lib/shop/db')).closeDb;
+
+    // the seeded admin gets an authenticator for the test
+    adminMfa = (await raw.query('SELECT id, mfa_enabled, mfa_secret_encrypted, mfa_enrolled_at, mfa_last_used_step FROM users WHERE email = ?', ['admin@joia.test']) as any)[0][0];
+    await raw.query('UPDATE users SET mfa_enabled = 1, mfa_secret_encrypted = ?, mfa_last_used_step = NULL WHERE email = ?', [encryptTotpSecret(MFA_SECRET, MFA_KEY), 'admin@joia.test']);
   });
 
   afterAll(async function () {
+    if (adminMfa) {
+      await raw.query('UPDATE users SET mfa_enabled = ?, mfa_secret_encrypted = ?, mfa_enrolled_at = ?, mfa_last_used_step = ? WHERE id = ?',
+        [adminMfa.mfa_enabled, adminMfa.mfa_secret_encrypted, adminMfa.mfa_enrolled_at, adminMfa.mfa_last_used_step, adminMfa.id]).catch(function (e) { process.stderr.write('mfa restore: ' + e + '\n'); });
+      // the test's wrong passwords and codes, so a second run within 15 minutes isn't locked out
+      await pool.query('DELETE FROM shop.sign_in_failures WHERE bucket IN ($1)', [['email:admin@joia.test', 'ip:10.9.9.8', 'ip:10.9.9.9']]).catch(function () {});
+    }
     await cleanup().catch(function (e) { process.stderr.write('cleanup: ' + e + '\n'); });
     await closeDb();
     await raw.end();
@@ -334,7 +359,23 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect((await call('POST', 'login', { body: { email: nobody, password: 'nope', ip: '10.6.6.5' } })).status).toBe(429);
     expect((await one('SELECT COUNT(*) AS n FROM shop.sign_in_failures WHERE bucket = $1', ['email:' + nobody])).n).toBe(5);
 
-    const signIn = await call('POST', 'login', { body: { email: 'Admin@joia.test', password: 'JoiaDev!2026-staff', ip: '10.9.9.9' } });
+    // two-factor: the password alone isn't enough, a wrong or used code neither
+    const pw = { email: 'Admin@joia.test', password: 'JoiaDev!2026-staff', ip: '10.9.9.8' };
+    const noCode = await call('POST', 'login', { body: pw });
+    expect(noCode.status).toBe(401);
+    expect(noCode.body.error).toMatch(/6-digit code/);
+    const wrong = String((Number(totpCode(MFA_SECRET, totpStep())) + 1) % 1000000).padStart(6, '0');
+    expect((await call('POST', 'login', { body: { ...pw, code: wrong } })).status).toBe(401);
+    expect((await call('POST', 'login', { body: { ...pw, code: freshCode() } })).status).toBe(200);
+    expect((await call('POST', 'login', { body: { ...pw, code: totpCode(MFA_SECRET, totpStep()) } })).status).toBe(401);
+    // without an authenticator set up in the members app: refused
+    await raw.query('UPDATE users SET mfa_enabled = 0 WHERE email = ?', ['admin@joia.test']);
+    const notSetUp = await call('POST', 'login', { body: { ...pw, code: freshCode() } });
+    expect(notSetUp.status).toBe(403);
+    expect(notSetUp.body.error).toMatch(/staff portal/);
+    await raw.query('UPDATE users SET mfa_enabled = 1, mfa_last_used_step = NULL WHERE email = ?', ['admin@joia.test']);
+
+    const signIn = await call('POST', 'login', { body: { email: 'Admin@joia.test', password: 'JoiaDev!2026-staff', ip: '10.9.9.9', code: freshCode() } });
     expect(signIn.status).toBe(200);
     expect(signIn.body.user.role).toBe('SUPER_ADMIN');
     const id = signIn.body.user.id;
@@ -408,7 +449,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect((await send(Object.assign({}, good, { email: 'shoptest+reg' + stamp + '-x@example.com' }))).status).toBe(429);
 
     // the dashboard's list
-    const signIn = await routes.admin.POST(new Request(SITE + '/shop/admin/login', { method: 'POST', headers: { Authorization: 'Bearer ' + ADMIN_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'admin@joia.test', password: 'JoiaDev!2026-staff', ip: '10.9.9.9' }) }), { params: Promise.resolve({ path: ['login'] }) });
+    const signIn = await routes.admin.POST(new Request(SITE + '/shop/admin/login', { method: 'POST', headers: { Authorization: 'Bearer ' + ADMIN_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'admin@joia.test', password: 'JoiaDev!2026-staff', ip: '10.9.9.9', code: await freshCode(true) }) }), { params: Promise.resolve({ path: ['login'] }) });
     const id = (await signIn.json()).user.id;
     const list = await routes.admin.GET(new Request(SITE + '/shop/admin/registrations?q=' + encodeURIComponent('reg' + stamp), { headers: { Authorization: 'Bearer ' + ADMIN_KEY, 'X-Admin-User': id } }), { params: Promise.resolve({ path: ['registrations'] }) });
     const data = await list.json();

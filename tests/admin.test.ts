@@ -150,12 +150,14 @@ describe('admin backend calls', function () {
   it('signs in through the API and passes its messages on', async function () {
     let reply: () => Reply | Promise<Reply> = function () { return { status: 200, body: { user: USER } }; };
     const { adminLogin } = await backend(function () { return reply(); });
-    expect(await adminLogin('admin@joia.test', 'pw', '1.2.3.4')).toEqual({ user: USER });
+    expect(await adminLogin('admin@joia.test', 'pw', '123456', '1.2.3.4')).toEqual({ user: USER });
     expect(seen[0].path).toBe('login');
-    expect(await seen[0].request.json()).toEqual({ email: 'admin@joia.test', password: 'pw', ip: '1.2.3.4' });
+    expect(await seen[0].request.json()).toEqual({ email: 'admin@joia.test', password: 'pw', code: '123456', ip: '1.2.3.4' });
     reply = function () { return { status: 401, body: { error: 'Email or password is incorrect.' } }; };
-    expect(await adminLogin('admin@joia.test', 'bad', '1.2.3.4')).toEqual({ error: 'Email or password is incorrect.' });
+    expect(await adminLogin('admin@joia.test', 'bad', '123456', '1.2.3.4')).toEqual({ error: 'Email or password is incorrect.' });
+    reply = function () { return { status: 403, body: { error: 'Set up two-factor sign-in first.' } }; };
+    expect(await adminLogin('admin@joia.test', 'pw', '123456', '1.2.3.4')).toEqual({ error: 'Set up two-factor sign-in first.' });
     reply = function () { throw new Error('down'); };
-    expect((await adminLogin('admin@joia.test', 'pw', '1.2.3.4')).error).toMatch(/isn’t available/);
+    expect((await adminLogin('admin@joia.test', 'pw', '123456', '1.2.3.4')).error).toMatch(/isn’t available/);
   });
 });

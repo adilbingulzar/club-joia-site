@@ -27,6 +27,8 @@ export const shopConfig = {
   },
   // the sales dashboard's days
   get timezone() { return env('SHOP_TIMEZONE') || 'Asia/Dubai'; },
+  // decrypts the admins' authenticator secrets (two-factor sign-in): the members app's same setting
+  get mfaKey() { return env('MFA_ENCRYPTION_KEY'); },
   maxPerTicket: 10,
   // an unpaid order keeps its tickets out of stock this long
   holdMinutes: 30,
