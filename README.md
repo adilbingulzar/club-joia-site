@@ -121,6 +121,7 @@ SHOP_SUPPORT_PHONE="+971 ..."               # the phone in the emails, else the 
 SHOP_ALT_PAYMENT_URL=                       # optional: "Alternative payment option", default <SHOP_SITE_URL>/tickets
 SHOP_TIMEZONE=Asia/Dubai                    # optional: the sales dashboard's days
 SHOP_ADMIN_KEY=long-random-text             # 16+ characters: the key of the ticket and dashboard APIs, and the dashboard cookie's
+SALES_DASHBOARD=on                          # the sales dashboard (/admin, /shop/admin) is closed (404) unless this is "on"
 MFA_ENCRYPTION_KEY=...                      # the members app's MFA_ENCRYPTION_KEY, same value: dashboard sign-in checks the admins' authenticator codes
 TELR_STORE_ID=...                           # Telr: Integrations > Hosted Payment Page > Request Authentication
 TELR_AUTH_KEY=...
