@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import nextConfig from '../next.config';
+import nextConfig, { CONTENT_SECURITY_POLICY } from '../next.config';
 import { MAINTENANCE_PATHS, proxy } from '../proxy';
 import { allowed, allowlistVerdict, clientIp, parseAllowlist } from '../lib/ip-allowlist';
 
@@ -211,5 +211,41 @@ describe('sales dashboard switch', function () {
     vi.stubEnv('MAINTENANCE_MODE', 'false');
     expect(visit('/admin/login').status).toBe(200);
     expect(visit('/shop/admin/stats').status).toBe(200);
+  });
+});
+
+describe('security headers', function () {
+  type Rule = { source: string; headers: { key: string; value: string }[] };
+  const rulesFor = async function (path: string) {
+    const rules = (await nextConfig.headers!()) as Rule[];
+    // Next matches a source against the whole path, as path-to-regexp does with a custom group
+    return rules.filter(function (r) {
+      return r.source === '/:path*' || new RegExp('^' + r.source + '$').test(path);
+    }).flatMap(function (r) { return r.headers.map(function (h) { return h.key; }); });
+  };
+
+  it('are sent on pages, APIs and the pre-registration page', async function () {
+    for (const path of ['/', '/tickets', '/api/checkout', '/preregister/index.html', '/shop/pay/CJ1']) {
+      const keys = await rulesFor(path);
+      expect(keys).toEqual(expect.arrayContaining(['Strict-Transport-Security', 'X-Frame-Options', 'X-Content-Type-Options', 'Referrer-Policy', 'Permissions-Policy', 'Content-Security-Policy']));
+    }
+  });
+
+  it('leave the CSP off the ticket server\'s files (PDF viewer)', async function () {
+    for (const path of ['/booking_events/pdf/abc', '/downloadticketpdf/G-1', '/ticketing/download', '/uploads/qrcodes/T-1.png']) {
+      const keys = await rulesFor(path);
+      expect(keys).not.toContain('Content-Security-Policy');
+      expect(keys).toContain('Strict-Transport-Security');
+    }
+  });
+
+  it('allow nothing from other domains', function () {
+    expect(CONTENT_SECURITY_POLICY).not.toMatch(/https?:|\*/);
+    expect(CONTENT_SECURITY_POLICY).toContain("frame-ancestors 'none'");
+    expect(CONTENT_SECURITY_POLICY).toContain("object-src 'none'");
+  });
+
+  it('hide X-Powered-By', function () {
+    expect(nextConfig.poweredByHeader).toBe(false);
   });
 });
