@@ -16,7 +16,8 @@ export const shopConfig = {
   get currency() { return (env('SHOP_CURRENCY') || 'USD').toUpperCase(); },
   // this site: the buyer comes back to its /thank-you and /payment/<status> pages
   get siteUrl() { return url(process.env.SHOP_SITE_URL); },
-  // where Telr and the emails reach these APIs, default the site
+  // where the buyer's bank check returns (IFZA's registered return domain) and the emails reach
+  // these APIs, default the site
   get publicUrl() { return url(process.env.SHOP_PUBLIC_URL) || url(process.env.SHOP_SITE_URL); },
   // where the emails load their images (logo.png, hero.jpg), default this site's /shop/email
   // "Alternative payment option" in the email after a failed payment, default the tickets page
@@ -33,12 +34,14 @@ export const shopConfig = {
   // an unpaid order keeps its tickets out of stock this long
   holdMinutes: 30,
 
-  telr: {
-    get storeId() { return env('TELR_STORE_ID'); },
-    get authKey() { return env('TELR_AUTH_KEY'); },
-    get test() { return process.env.TELR_TEST === '1'; },
+  // card payments through IFZA (lib/shop/ifza.ts)
+  ifza: {
+    // issued by IFZA (ifza_ik_live_...): server only, never in the browser
+    get apiKey() { return env('IFZA_API_KEY'); },
+    // IFZA, IFZA-Test, Elixium-Events or Elixium-Events-Test (a -Test store while the key is in test mode)
+    get store() { return env('IFZA_STORE'); },
     // only for tests against a stand-in server
-    get url() { return url(process.env.TELR_URL) || 'https://secure.telr.com/gateway/order.json'; }
+    get url() { return url(process.env.IFZA_URL) || 'https://world.ifza.com'; }
   },
 
   email: {

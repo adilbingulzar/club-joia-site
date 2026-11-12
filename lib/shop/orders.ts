@@ -1,16 +1,17 @@
 /*
- * The ticket shop: event, prices and stock for the site, orders, Telr payment and what follows.
- * The site's pages call these functions directly (lib/catalog.ts, app/api/checkout); an HTTP side is
- * in app/Api/Eventsnew (the same answers as
- * Alfred's ticket API) and app/shop (payment link, Telr's return and advice, retry).
+ * The ticket shop: event, prices and stock for the site, orders, payment (IFZA, lib/shop/ifza.ts)
+ * and what follows. The site's pages call these functions directly (lib/catalog.ts, app/api/checkout,
+ * app/pay, app/api/pay); an HTTP side is in app/Api/Eventsnew (the same answers as Alfred's ticket
+ * API) and app/shop (payment link, the bank check's return, retry).
  *
  * The event id is the event's slug (SHOP_EVENT), the ticket ids are the products' (products.ts).
- * An order's status is only ever taken from Telr's check, never from a request.
+ * An order's status is only ever taken from IFZA's payment status, never from a request.
  */
 import { shopConfig as config } from './config';
 import { db, humanCode, transaction, type Db } from './db';
 import { product, products, type Product } from './products';
-import * as telr from './telr';
+import * as ifza from './ifza';
+import { countries } from '../countries';
 import { fulfil } from './fulfil';
 import { notPaidEmail } from './email';
 
@@ -19,7 +20,7 @@ export class BuyerError extends Error {}
 export type OrderItemRow = { productId: string; name: string; price: number; quantity: number; tier: string; codes: string[] };
 export type Buyer = {
   firstName: string; lastName: string; email: string; address: string; zipcode: string; city: string;
-  country: string; gender: string; birthday: string; mobile: string; ip: string;
+  country: string; countryCode?: string; gender: string; birthday: string; mobile: string; ip: string;
 };
 
 // Unpaid orders (not paid, made in the last hour) one email or one address may have, so nobody can
@@ -44,7 +45,7 @@ async function saleEvent(): Promise<SaleEvent | null> {
   return r.rows[0] || null;
 }
 
-// tickets taken of each product: paid, and unpaid ones still on their way to Telr
+// tickets taken of each product: paid, and unpaid ones still being paid for
 async function taken(client: Db, eventId: string): Promise<Record<string, number>> {
   const r = await client.query(
     `SELECT i.product_id AS id, SUM(i.quantity) AS n
@@ -95,6 +96,8 @@ function readOrder(body: Record<string, string>): { buyer: Buyer; items: OrderIt
     firstName: text(body.name), lastName: text(body.surname),
     email: text(body.email, 150).toLowerCase(),
     address: text(body.address, 200), zipcode: text(body.zipcode, 20), city: text(body.city), country: text(body.country, 60),
+    // ISO 3166 code (the site sends it), for the payment's billing address
+    countryCode: text(body.countryCode, 2).toUpperCase(),
     gender: text(body.gender, 10), birthday: text(body.age, 10),
     mobile: phone ? (code ? '+' + code + ' ' : '') + phone : '',
     ip: text(body.ip, 60)
@@ -138,7 +141,7 @@ function payLink(ref: string): string {
 // buyTickets: { status: '1', paymentUrl, orderId } or { status: '0', message } for the buyer
 export async function buyTickets(body: Record<string, string>) {
   try {
-    if (!telr.configured()) throw new BuyerError('Online payment isn’t set up yet. Please contact us to complete your booking.');
+    if (!ifza.configured()) throw new BuyerError('Online payment isn’t set up yet. Please contact us to complete your booking.');
     const e = await saleEvent();
     if (!e) throw new BuyerError('Tickets aren’t on sale at the moment.');
     const order = readOrder(body);
@@ -179,9 +182,13 @@ export async function buyTickets(body: Record<string, string>) {
 }
 
 // ─── Payment ───
+//
+// The buyer pays on this site's /pay/<ref> page (app/pay): Telr's card fields there, from the IFZA
+// payment made for the order (preparePayment), then the card token goes to IFZA (payWithCard) and
+// the bank's check opens in a frame. It returns to /shop/return/<ref> (app/shop/return), which asks
+// IFZA for the status (settle). Card details never reach this server.
 
-// Same origin and "/ticketing_" in the path: the site's checkout takes it as "no payment page"
-// (paymentPage in app/api/checkout). A buyer opening it lands on the declined page.
+// Same origin and "/ticketing_" in the path: a buyer opening it lands on the declined page.
 function noPaymentPage(ref: string): string {
   return config.publicUrl + '/shop/ticketing_error?orderid=' + encodeURIComponent(ref);
 }
@@ -192,59 +199,197 @@ export function sitePage(status: string, ref: string): string {
   return config.siteUrl + page + '?orderid=' + encodeURIComponent(ref);
 }
 
-// The payment link (/shop/pay/<ref>): makes the Telr order once, the address to send the buyer
-// to; null for an unknown order
-export async function payUrl(ref: string): Promise<string | null> {
-  return transaction(async function (c) {
-    const o = (await c.query('SELECT * FROM shop.orders WHERE ref = $1 FOR UPDATE', [ref])).rows[0];
-    if (!o) return null;
-    if (o.status === 'paid') return sitePage('paid', ref);
-    if (o.status !== 'pending') return noPaymentPage(ref);
-    if (o.telr_url) return o.telr_url as string;
+// the site's page for an order that can't be paid (any more)
+function closedPage(o: { status: string; ref: string }): string {
+  if (o.status === 'paid') return sitePage('paid', o.ref);
+  if (o.status === 'cancelled') return sitePage('cancel', o.ref);
+  return sitePage('denied', o.ref);
+}
 
-    const created = await telr.createOrder({
-      cartId: o.ref,
+// the payment page of an order
+export function payPage(ref: string): string {
+  return config.siteUrl + '/pay/' + encodeURIComponent(ref);
+}
+
+// where the bank check sends the buyer back (on IFZA's registered return domain)
+function returnUrl(ref: string): string {
+  return config.publicUrl + '/shop/return/' + encodeURIComponent(ref);
+}
+
+// The payment link (/shop/pay/<ref>): the address to send the buyer to; null for an unknown order
+export async function payUrl(ref: string): Promise<string | null> {
+  const o = (await db.query('SELECT ref, status FROM shop.orders WHERE ref = $1', [ref])).rows[0];
+  if (!o) return null;
+  if (o.status === 'paid') return sitePage('paid', ref);
+  if (o.status !== 'pending') return noPaymentPage(ref);
+  return payPage(ref);
+}
+
+// the billing address IFZA needs (the card network requires address1, city and an ISO country)
+function customer(b: Buyer): ifza.Customer {
+  let code = String(b.countryCode || '').toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) {
+    const byName = countries.find(function (c) { return c.name.toLowerCase() === String(b.country || '').toLowerCase(); });
+    code = byName ? byName.code : '';
+  }
+  return {
+    firstName: b.firstName, lastName: b.lastName, email: b.email,
+    phone: String(b.mobile || '').replace(/[^\d+]/g, ''),
+    address1: b.address, city: b.city, country: code
+  };
+}
+
+// a time from IFZA as MySQL DATETIME text (UTC), 30 minutes from now if it can't be read
+function datetime(iso: string): string {
+  const d = new Date(iso);
+  const t = isNaN(d.getTime()) ? new Date(Date.now() + 30 * 60000) : d;
+  return t.toISOString().replace('T', ' ').replace('Z', '');
+}
+
+export type PayState =
+  | { state: 'ready'; ref: string; amount: number; currency: string; items: OrderItemRow[]; init: ifza.TelrInit }
+  // nothing to pay here: the site's page to show instead
+  | { state: 'done'; page: string }
+  // the order's half hour is over (its tickets aren't held any more): a new order is needed
+  | { state: 'expired'; ref: string }
+  | { state: 'error'; message: string };
+
+const UNAVAILABLE = 'Payment isn’t available for your order right now. You have not been charged. Please try again later.';
+
+/*
+ * The payment of an order, for the /pay page: makes the IFZA payment once (the checkout also does,
+ * so a refusal shows on the form), or the page to go to instead. null for an unknown order.
+ */
+export async function preparePayment(ref: string): Promise<PayState | null> {
+  const r = await transaction(async function (c): Promise<PayState | 'settle' | null> {
+    const o = (await c.query(
+      'SELECT *, (pay_expires_at > NOW(3) + INTERVAL 1 MINUTE) AS pay_open, (created_at > NOW(3) - INTERVAL $2 MINUTE) AS held FROM shop.orders WHERE ref = $1 FOR UPDATE',
+      [ref, config.holdMinutes]
+    )).rows[0];
+    if (!o) return null;
+    if (o.status !== 'pending') return { state: 'done', page: closedPage(o) };
+    // the card was sent already: its outcome decides
+    if (o.pay_checkout_at) return 'settle';
+    const ready = function (init: ifza.TelrInit): PayState {
+      return { state: 'ready', ref: o.ref, amount: Number(o.amount), currency: o.currency, items: o.items, init };
+    };
+    if (o.pay_id) return Number(o.pay_open) ? ready(o.pay_init) : { state: 'expired', ref: o.ref };
+    if (!Number(o.held)) return { state: 'expired', ref: o.ref };
+    if (!ifza.configured()) return { state: 'error', message: UNAVAILABLE };
+
+    const created = await ifza.createPayment({
+      reference: o.ref,
       amount: o.amount,
       currency: o.currency,
       description: 'Club JOIA 300 tickets ' + o.ref,
-      returnUrl: config.publicUrl + '/shop/telr/return/' + encodeURIComponent(o.ref)
+      returnUrl: returnUrl(o.ref),
+      customer: customer(o.buyer)
     });
-    await c.query(
-      "UPDATE shop.orders SET telr_ref = $2, telr_url = $3, telr_create = $4, status = CASE WHEN $3 IS NULL THEN 'failed' ELSE status END, updated_at = NOW(3) WHERE id = $1",
-      [o.id, created.ref, created.url, JSON.stringify(created.response)]
-    );
-    if (!created.url) {
-      console.error('[shop] telr create ' + o.ref + ' refused:', JSON.stringify(created.response));
-      return noPaymentPage(ref);
+    if (!created.id) {
+      console.error('[shop] ifza create ' + o.ref + ' refused: ' + created.why);
+      // IFZA's own refusal (a 4xx with its JSON error): this order can't be paid; IFZA down, busy, or
+      // a firewall/proxy page in front of it (not JSON): it can be tried again
+      const status = created.response && created.response.status;
+      const refused = status >= 400 && status < 500 && status !== 429 && !!created.code && created.code !== 'not_json';
+      await c.query(
+        "UPDATE shop.orders SET pay_create = $2, status = CASE WHEN $3 THEN 'failed' ELSE status END, updated_at = NOW(3) WHERE id = $1",
+        [o.id, JSON.stringify(created.response), refused]
+      );
+      return { state: 'error', message: UNAVAILABLE };
     }
-    return created.url;
+    await c.query(
+      "UPDATE shop.orders SET pay_id = $2, pay_status = 'CREATED', pay_init = $3, pay_expires_at = $4, pay_create = $5, updated_at = NOW(3) WHERE id = $1",
+      [o.id, created.id, JSON.stringify(created.init), datetime(created.expiresAt), JSON.stringify(created.response)]
+    );
+    return ready(created.init);
   });
+  if (r !== 'settle') return r;
+  const status = await settle(ref);
+  return { state: 'done', page: sitePage(status || 'pending', ref) };
+}
+
+export type CardResult =
+  // show the bank's check (3-D Secure) in a frame
+  | { orderUrl: string }
+  // go to this page (the payment is decided, or being decided)
+  | { page: string }
+  // tell the buyer; retry: the same card form can be used again
+  | { error: string; retry: boolean };
+
+/*
+ * The buyer's card token (from Telr's card fields) for the order's IFZA payment: checks it out,
+ * once per payment. Answers the bank's check, or where to go.
+ */
+export async function payWithCard(ref: string, cardToken: string): Promise<CardResult | null> {
+  const r = await transaction(async function (c): Promise<CardResult | 'declined' | 'settle' | null> {
+    const o = (await c.query(
+      'SELECT *, (pay_expires_at > NOW(3)) AS pay_open FROM shop.orders WHERE ref = $1 FOR UPDATE', [ref]
+    )).rows[0];
+    if (!o) return null;
+    if (o.status !== 'pending') return { page: closedPage(o) };
+    if (o.pay_checkout_at) return 'settle';
+    if (!o.pay_id || !Number(o.pay_open)) {
+      return { error: 'This payment has expired. Please start again: you have not been charged.', retry: false };
+    }
+
+    const out = await ifza.checkout(o.pay_id, cardToken);
+    if (out.orderUrl) {
+      await c.query("UPDATE shop.orders SET pay_checkout_at = NOW(3), pay_status = 'CHECKED_OUT', updated_at = NOW(3) WHERE id = $1", [o.id]);
+      console.info('[shop] order ' + o.ref + ': card sent, bank check');
+      return { orderUrl: out.orderUrl };
+    }
+    console.error('[shop] ifza checkout ' + o.ref + ': ' + out.why);
+    // checked out already (by a request we lost the answer of): its status decides
+    if (out.code === 'already_checked_out') {
+      await c.query('UPDATE shop.orders SET pay_checkout_at = NOW(3), updated_at = NOW(3) WHERE id = $1', [o.id]);
+      return 'settle';
+    }
+    // the gateway refused the card: this payment is used up
+    if (out.status === 502 && out.code === 'telr_error') {
+      await c.query(
+        "UPDATE shop.orders SET pay_checkout_at = NOW(3), pay_status = 'REFUSED', pay_check = $2, status = 'declined', updated_at = NOW(3) WHERE id = $1",
+        [o.id, JSON.stringify({ error: out.code, message: out.message })]
+      );
+      return 'declined';
+    }
+    if (out.code === 'validation_error') return { error: 'Please check your card details and try again.', retry: true };
+    if (out.code === 'expired') return { error: 'This payment has expired. Please start again: you have not been charged.', retry: false };
+    // IFZA unreachable, busy or not set up: nothing was charged, the same card form can try again
+    return { error: 'We couldn’t reach the payment service. You have not been charged. Please try again in a moment.', retry: true };
+  });
+  if (r === null || typeof r === 'object') return r;
+  if (r === 'declined') {
+    const o = (await db.query('SELECT id FROM shop.orders WHERE ref = $1', [ref])).rows[0];
+    if (o) await sendNotPaid(o.id).catch(function (e) { console.error('[shop] order ' + ref + ' not-paid email:', e); });
+    return { page: sitePage('denied', ref) };
+  }
+  return { page: sitePage((await settle(ref)) || 'pending', ref) };
 }
 
 /*
- * The order's status from Telr: 'paid' (and fulfilled), 'pending', 'denied' or 'cancel' for the
+ * The order's status from IFZA: 'paid' (and fulfilled), 'pending', 'denied' or 'cancel' for the
  * site's pages, null for an unknown order.
  */
 export async function settle(ref: string): Promise<string | null> {
   const o = (await db.query('SELECT * FROM shop.orders WHERE ref = $1', [ref])).rows[0];
   if (!o) return null;
   if (o.fulfilled_at) return 'paid';
-  if (!o.telr_ref) return 'cancel';
+  if (!o.pay_id) return o.status === 'pending' ? 'cancel' : (o.status === 'paid' ? 'paid' : 'denied');
 
   const status = o.status === 'paid'
-    ? { code: telr.STATUS.PAID, paid: true, response: null }
-    : await telr.checkOrder({ ref: o.ref, telr_ref: o.telr_ref, amount: o.amount, currency: o.currency });
-  if (!status) return 'pending'; // Telr can't be asked now: its advice can still settle it
+    ? { status: 'PAID', paid: true, response: null }
+    : await ifza.paymentStatus({ ref: o.ref, pay_id: o.pay_id, amount: o.amount, currency: o.currency });
+  if (!status) return o.status === 'declined' ? 'denied' : 'pending'; // IFZA can't be asked now: the sweep tries again
 
   let next = o.status;
   if (status.paid) next = 'paid';
-  else if (status.code === telr.STATUS.DECLINED) next = 'declined';
-  else if (status.code === telr.STATUS.CANCELLED || status.code === telr.STATUS.EXPIRED) next = 'cancelled';
+  else if (status.status === 'DECLINED') next = 'declined';
+  else if (status.status === 'CANCELLED' || status.status === 'EXPIRED') next = 'cancelled';
 
   if (status.response) {
     await db.query(
-      "UPDATE shop.orders SET status = $2, telr_status = $3, telr_check = $4, paid_at = CASE WHEN $2 = 'paid' THEN COALESCE(paid_at, NOW(3)) ELSE paid_at END, updated_at = NOW(3) WHERE id = $1 AND status <> 'paid'",
-      [o.id, next, status.code, JSON.stringify(status.response)]
+      "UPDATE shop.orders SET status = $2, pay_status = $3, pay_check = $4, paid_at = CASE WHEN $2 = 'paid' THEN COALESCE(paid_at, NOW(3)) ELSE paid_at END, updated_at = NOW(3) WHERE id = $1 AND status <> 'paid'",
+      [o.id, next, status.status, JSON.stringify(status.response)]
     );
   }
   if (next === 'paid') {
@@ -286,7 +431,7 @@ async function sendNotPaid(orderId: number): Promise<void> {
 
 /*
  * "Complete your payment" in that email (/shop/retry/<ref>): a new order for the same tickets at
- * today's prices (Telr takes each cart once), then its payment link. Paid already: the thank-you
+ * today's prices (IFZA takes each reference once), then its payment link. Paid already: the thank-you
  * page; a ticket off sale or sold out: the alternative payment page. null for an unknown order.
  */
 export async function retryUrl(ref: string): Promise<string | null> {
@@ -296,7 +441,7 @@ export async function retryUrl(ref: string): Promise<string | null> {
     "SELECT ref FROM shop.orders WHERE (ref = $1 OR retry_of = $1) AND status = 'paid' LIMIT 1", [o.ref]
   )).rows[0];
   if (done) return sitePage('paid', done.ref);
-  if (!telr.configured()) return config.altPaymentUrl;
+  if (!ifza.configured()) return config.altPaymentUrl;
 
   const items: OrderItemRow[] = [];
   for (const i of o.items as OrderItemRow[]) {
@@ -321,10 +466,24 @@ export async function retryUrl(ref: string): Promise<string | null> {
   return payLink(next);
 }
 
-// Telr's transaction advice (tran_cartid): the HTTP status to answer, anything but 200 makes Telr
-// send it again
-export async function advice(cartId: string): Promise<number> {
-  const ref = text(cartId, 63);
-  if (!ref) return 400;
-  return (await settle(ref)) ? 200 : 503;
+/*
+ * IFZA sends no notification: a buyer who paid but closed the page before the return would stay
+ * unpaid. Every few minutes (instrumentation.ts) this asks IFZA about orders whose card was sent and
+ * that aren't decided yet (also ON_HOLD ones), for a week. The number of orders asked.
+ */
+export async function sweep(limit = 20): Promise<number> {
+  if (!ifza.configured()) return 0;
+  const rows = (await db.query(
+    `SELECT ref FROM shop.orders
+     WHERE status = 'pending' AND pay_checkout_at IS NOT NULL
+       AND pay_checkout_at > NOW(3) - INTERVAL 7 DAY AND updated_at < NOW(3) - INTERVAL 2 MINUTE
+     ORDER BY updated_at LIMIT ` + Math.max(1, Math.min(100, Math.floor(limit))),
+    []
+  )).rows;
+  for (const r of rows) {
+    // touched first, so an order IFZA can't answer for waits its turn
+    await db.query('UPDATE shop.orders SET updated_at = NOW(3) WHERE ref = $1', [r.ref]);
+    await settle(r.ref).catch(function (e) { console.error('[shop] sweep ' + r.ref + ':', e); });
+  }
+  return rows.length;
 }

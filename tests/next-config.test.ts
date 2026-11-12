@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import nextConfig, { CONTENT_SECURITY_POLICY } from '../next.config';
+import nextConfig, { CONTENT_SECURITY_POLICY, PAYMENT_PAGE_POLICY } from '../next.config';
 import { MAINTENANCE_PATHS, proxy } from '../proxy';
 import { allowed, allowlistVerdict, clientIp, parseAllowlist } from '../lib/ip-allowlist';
 
@@ -50,10 +50,10 @@ describe('ticket email paths', function () {
     expect(showsMaintenance('/assets/img/logo.png')).toBe(false);
   });
 
-  it('leave the ticket shop open: this site\'s server, Telr and the emails call it', function () {
+  it('leave the ticket shop open: this site\'s server, the bank check and the emails call it', function () {
     expect(showsMaintenance('/Api/Eventsnew/buyTickets')).toBe(false);
     expect(showsMaintenance('/shop/pay/CJ123')).toBe(false);
-    expect(showsMaintenance('/shop/telr/advice')).toBe(false);
+    expect(showsMaintenance('/shop/return/CJ123')).toBe(false);
     expect(showsMaintenance('/shop/email/hero.jpg')).toBe(false);
     expect(showsMaintenance('/shopping')).toBe(true);
   });
@@ -143,7 +143,7 @@ describe('IP allowlist', function () {
     vi.stubEnv('IP_ALLOWLIST', '203.0.113.7, 10.0.0.0/8, 2001:db8::/32');
     vi.stubEnv('MAINTENANCE_MODE', 'false');
     vi.stubEnv('SALES_DASHBOARD', 'on');
-    for (const path of ['/', '/tickets', '/admin', '/admin/login', '/api/checkout', '/api/preregister', '/Api/Eventsnew/buyTickets', '/shop/telr/advice', '/_next/static/chunks/a.js', '/assets/fonts/Outfit.woff2', '/privacy']) {
+    for (const path of ['/', '/tickets', '/admin', '/admin/login', '/api/checkout', '/api/preregister', '/Api/Eventsnew/buyTickets', '/shop/return/CJ1', '/_next/static/chunks/a.js', '/assets/fonts/Outfit.woff2', '/privacy']) {
       const r = visit(path, '198.51.100.1');
       expect(r.status, path).toBe(403);
       expect(await r.text()).toBe('Access denied.');
@@ -203,7 +203,7 @@ describe('sales dashboard switch', function () {
       expect(await r.text()).toBe('Not found.');
     }
     // the rest of the site and the ticket shop stay open
-    for (const path of ['/', '/tickets', '/administration', '/shop/pay/CJ1', '/shop/telr/advice', '/assets/img/logo.png']) expect(visit(path).status, path).toBe(200);
+    for (const path of ['/', '/tickets', '/administration', '/shop/pay/CJ1', '/shop/return/CJ1', '/assets/img/logo.png']) expect(visit(path).status, path).toBe(200);
   });
 
   it('opens with SALES_DASHBOARD=on', function () {
@@ -247,5 +247,36 @@ describe('security headers', function () {
 
   it('hide X-Powered-By', function () {
     expect(nextConfig.poweredByHeader).toBe(false);
+  });
+
+  // the headers a path ends up with: Next applies the matching rules in order, a later one wins
+  const effective = async function (path: string) {
+    const rules = (await nextConfig.headers!()) as Rule[];
+    const out: Record<string, string> = {};
+    rules.forEach(function (r) {
+      const re = new RegExp('^' + r.source.replace(/\/:path\*$/, '(?:/.*)?').replace(/:ref\b/g, '[^/]+') + '$');
+      if (re.test(path)) r.headers.forEach(function (h) { out[h.key] = h.value; });
+    });
+    return out;
+  };
+
+  it('let Telr\'s card fields (script and frame) load on the payment page only', async function () {
+    const pay = await effective('/pay/CJ123');
+    expect(pay['Content-Security-Policy']).toBe(PAYMENT_PAGE_POLICY);
+    expect(PAYMENT_PAGE_POLICY).toContain("script-src 'self' 'unsafe-inline' https://secure.telr.com");
+    expect(PAYMENT_PAGE_POLICY).toContain("frame-src 'self' https://secure.telr.com");
+    expect(PAYMENT_PAGE_POLICY).toContain("frame-ancestors 'none'");
+    expect(pay['X-Frame-Options']).toBe('DENY');
+    for (const path of ['/', '/summary', '/tickets', '/pay', '/pay/CJ1/x', '/thank-you']) {
+      expect((await effective(path))['Content-Security-Policy'], path).toBe(CONTENT_SECURITY_POLICY);
+    }
+  });
+
+  it('let only this site frame the bank check\'s return page', async function () {
+    const ret = await effective('/shop/return/CJ123');
+    expect(ret['X-Frame-Options']).toBe('SAMEORIGIN');
+    expect(ret['Content-Security-Policy']).toContain("frame-ancestors 'self'");
+    expect(ret['Content-Security-Policy']).not.toMatch(/telr/);
+    expect((await effective('/shop/pay/CJ123'))['X-Frame-Options']).toBe('DENY');
   });
 });

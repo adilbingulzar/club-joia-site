@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { shopMock, TELR_URL, TICKET_IDS } from './shop-mock';
+import { shopMock, PAY_PAGE, TICKET_IDS } from './shop-mock';
 
 const BUYER = {
   firstName: 'Test', lastName: 'Buyer', email: 'Test@Example.com', repeatEmail: 'test@example.com',
@@ -25,15 +25,15 @@ beforeEach(function () { vi.spyOn(console, 'error').mockImplementation(function 
 afterEach(function () { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('checkout', function () {
-  it('books the order in the shop and returns Telr\'s payment page', async function () {
+  it('books the order in the shop, makes its payment and returns the site\'s payment page', async function () {
     const shop = shopMock();
     const res = await checkout();
 
-    expect(res).toEqual({ status: 200, body: { url: TELR_URL } });
-    expect(shop.sent('payUrl')!.get('ref')).toBe('CJTEST');
+    expect(res).toEqual({ status: 200, body: { url: PAY_PAGE } });
+    expect(shop.sent('preparePayment')!.get('ref')).toBe('CJTEST');
     expect(Object.fromEntries(shop.sent('buyTickets')!)).toEqual({
       name: 'Test', surname: 'Buyer', email: 'test@example.com',
-      address: 'Mall Road 1', zipcode: '54000', city: 'Lahore', country: 'pakistan',
+      address: 'Mall Road 1', zipcode: '54000', city: 'Lahore', country: 'pakistan', countryCode: 'PK',
       gender: 'male', age: '1990-01-01', countryPhoneCode: '92', phoneNumber: '3001234567', ip: '203.0.113.7',
       'tickets[0][ticketId]': TICKET_IDS['Ruby Red, Friday & Saturday'], 'tickets[0][quantity]': '2'
     });
@@ -129,17 +129,19 @@ describe('checkout', function () {
     expect((await checkout()).body.error).toBe('You have reached the maximum bookings for this ticket!');
   });
 
-  it('tells the buyer on the form when Telr refuses the payment (the shop answers with its own page)', async function () {
-    shopMock({ payUrl: function () { return 'http://site.test/shop/ticketing_error?orderid=CJTEST'; } });
+  it('tells the buyer on the form when IFZA refuses the payment', async function () {
+    shopMock({ preparePayment: function () { return { state: 'error', message: 'Payment isn’t available for your order right now. You have not been charged. Please try again later.' }; } });
     expect(await checkout()).toEqual({
       status: 400,
       body: { error: 'Payment isn’t available for your order right now. You have not been charged. Please try again later.' }
     });
   });
 
-  it('reports an order the shop no longer knows the same way', async function () {
-    shopMock({ payUrl: function () { return null; } });
+  it('reports an order the shop no longer knows, or can\'t pay, the same way', async function () {
+    shopMock({ preparePayment: function () { return null; } });
     expect((await checkout()).status).toBe(400);
+    shopMock({ preparePayment: function () { return { state: 'done', page: 'http://site.test/payment/denied?orderid=CJTEST' }; } });
+    expect((await checkout()).body.error).toBe('Payment isn’t available for your order right now. You have not been charged. Please try again later.');
   });
 
   it('gives a general error when the shop fails', async function () {

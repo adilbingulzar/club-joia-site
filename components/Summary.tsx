@@ -328,7 +328,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
           </div>
           <p className="alert error" id="msg" role="alert" tabIndex={-1} ref={msgRef} hidden={!msg}>{msg}</p>
           <p className="note">
-            You’ll be redirected to our payment provider to complete your purchase. Booking and payment fees, if any, are shown there. Ticket confirmation is sent by email after payment.
+            Next, you’ll enter your card details on our secure payment page. Ticket confirmation is sent by email after payment.
           </p>
         </form>
       </div>
@@ -338,7 +338,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
         <Link className="btn" href="/tickets">Choose tickets</Link>
       </div>
 
-      {/* While Alfred books the order and until the payment page opens */}
+      {/* While the shop books the order and until the payment page opens */}
       {busy && <div className="page-loader" role="status" aria-live="polite">
         <span className="loader-ring" aria-hidden="true"></span>
         <p>Preparing your secure payment…</p>

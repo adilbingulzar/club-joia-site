@@ -1,4 +1,4 @@
-// The payment link of an order (buyTickets' paymentUrl): makes the Telr order once, then Telr's page.
+// The payment link of an order (buyTickets' paymentUrl, the emails): the site's payment page (/pay/<ref>).
 import { payUrl } from '@/lib/shop/orders';
 import { guarded, notFound, redirect } from '@/lib/shop/http';
 

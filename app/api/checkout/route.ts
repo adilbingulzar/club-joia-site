@@ -1,13 +1,14 @@
 /*
- * Books the order in the ticket shop (lib/shop) and returns Telr's payment page: { url }.
- * After payment the shop sends the buyer to /thank-you (or /payment/<status>).
+ * Books the order in the ticket shop (lib/shop), makes its IFZA payment and returns the site's
+ * payment page: { url } (/pay/<ref>, the card form). After payment the shop sends the buyer to
+ * /thank-you (or /payment/<status>).
  */
 import { NextResponse } from 'next/server';
 import { CJ_CONFIG as cfg, ticket } from '@/lib/config';
 import { country } from '@/lib/countries';
 import { getCatalog } from '@/lib/catalog';
 import { shopConfig } from '@/lib/shop/config';
-import { buyTickets, payUrl, ticketTypes } from '@/lib/shop/orders';
+import { buyTickets, preparePayment, ticketTypes } from '@/lib/shop/orders';
 import { isOver21, UNDER_21 } from '@/lib/age';
 
 type Buyer = {
@@ -62,15 +63,6 @@ async function ticketIds(): Promise<Record<string, string>> {
   return ids;
 }
 
-// Telr's payment page of the order, so a payment that can't be started (Telr refusing the
-// order, ...) is reported on the form. null when the shop has no payment page for it (it answers
-// with one of this site's own pages then).
-async function paymentPage(ref: string): Promise<string | null> {
-  const url = await payUrl(ref);
-  if (!url) return null;
-  return new URL(url).origin === new URL(shopConfig.publicUrl).origin ? null : url;
-}
-
 export async function POST(request: Request) {
   if (!shopConfig.event || !shopConfig.publicUrl) {
     console.error('checkout: SHOP_EVENT and SHOP_SITE_URL must be set');
@@ -97,6 +89,7 @@ export async function POST(request: Request) {
       zipcode: buyer.zipcode,
       city: buyer.city,
       country: buyerCountry.name.toLowerCase(),
+      countryCode: buyerCountry.code,
       countryPhoneCode: country(buyer.phoneCode)!.dial,
       phoneNumber: buyer.phone,
       // the buyer's address, for the shop's limit on unpaid orders
@@ -119,10 +112,11 @@ export async function POST(request: Request) {
 
     const res = await buyTickets(form);
     if (res.status === '1' && res.orderId) {
-      const page = await paymentPage(res.orderId);
-      if (page) return NextResponse.json({ url: page });
-      console.error('checkout: no payment page for', buyerCountry.name, res.orderId);
-      throw new CheckoutError('Payment isn’t available for your order right now. You have not been charged. Please try again later.');
+      // the payment now, so a refusal shows on the form
+      const pay = await preparePayment(res.orderId);
+      if (pay && pay.state === 'ready') return NextResponse.json({ url: shopConfig.siteUrl + '/pay/' + encodeURIComponent(res.orderId) });
+      console.error('checkout: no payment for', buyerCountry.name, res.orderId, pay ? pay.state : 'no order');
+      throw new CheckoutError(pay && pay.state === 'error' ? pay.message : 'Payment isn’t available for your order right now. You have not been charged. Please try again later.');
     }
 
     // the shop's messages are written for buyers (sold out, unfinished orders, ...)

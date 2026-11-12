@@ -1,6 +1,6 @@
 # Club JOIA 300
 
-Next.js version of the Club JOIA 300 ticket site (clubjoia300.com). Design and booking flow are identical to the original static site; tickets are sold by the site's own ticket shop (`lib/shop`) and paid with Telr.
+Next.js version of the Club JOIA 300 ticket site (clubjoia300.com). Design and booking flow are identical to the original static site; tickets are sold by the site's own ticket shop (`lib/shop`) and paid by card through IFZA (its gateway is Telr).
 
 ## Run
 
@@ -39,54 +39,71 @@ Locally that's `joia_dev` on this machine's MySQL.
 
 Old addresses such as `/tickets.html` or `/thank-you.html` redirect permanently to the new ones (see `next.config.ts`), so shared links and payment success URLs keep working.
 
-## Ticket shop (Telr)
+## Ticket shop (IFZA payments)
 
-The site sells the tickets itself, in **USD**, paid with **Telr**, and writes the buyer as a member
-with the tickets into the members app's MySQL database (`club-joia-300-backend`, whose code isn't
-used: only its database). Alfred is no longer used. The site's pages call the shop's functions
+The site sells the tickets itself, in **USD**, paid by card through **IFZA's payment API** (IFZA's
+gateway is Telr, with 3-D Secure), and writes the buyer as a member with the tickets into the
+members app's MySQL database (`club-joia-300-backend`, whose code isn't used: only its database).
+Alfred is no longer used, nor a direct Telr store. The site's pages call the shop's functions
 directly (`lib/shop`), not over HTTP.
 
 1. `/summary`: the buyer fills in their details. `app/api/checkout/route.ts` checks the form and
    calls `buyTickets` (`lib/shop/orders.ts`), each ticket by its id `<tier>/<package>`
-   ("ruby-red/3-days"). The order is saved in `shop_orders`.
-2. The checkout makes the Telr order (`payUrl`) and sends the browser to Telr's payment page.
-   (`/shop/pay/<ref>` does the same for a link.)
-3. Back from Telr (`/shop/telr/return/<ref>`), or Telr's transaction advice (`/shop/telr/advice`):
-   the status is asked from Telr, never taken from the request. Then `/thank-you?orderid=<ref>`
-   when paid, else `/payment/pending`, `/payment/denied` or `/payment/cancel`.
+   ("ruby-red/3-days"). The order is saved in `shop_orders`, and its IFZA payment is made at once
+   (`preparePayment`, IFZA's "create payment": amount, currency, the order ref as reference, the
+   billing address), so a refusal shows on the form. The browser goes to `/pay/<ref>`.
+2. `/pay/<ref>` (`app/pay/[ref]/page.tsx`, `components/CardPayment.tsx`): Telr's card fields, loaded
+   from `secure.telr.com` with the `telr_init` IFZA gave. "Pay" turns the card into a one-time token
+   in Telr's frame; only the token comes to our server (`app/api/pay`), which checks the payment out
+   at IFZA (`payWithCard`) and gets the bank's check (3-D Secure), shown in a frame on the page.
+   Card details never reach this server. The payment link `/shop/pay/<ref>` (emails) opens this page.
+3. The bank's check returns to `/shop/return/<ref>` (IFZA's `return_url`), as IFZA's guide says:
+   inside the frame it sends the payment to the payment page with `postMessage` (this site's origin
+   only), and that page asks our server (`/api/pay/status`); as the whole page (a bank that left the
+   frame) our server asks itself. Either way the status comes from IFZA (`settle`, never the
+   `outcome` in the address), then `/thank-you?orderid=<ref>` when paid, else `/payment/pending`,
+   `/payment/denied` or `/payment/cancel`. IFZA sends no notification: every 3 minutes the server
+   asks IFZA about orders whose card was sent and that aren't decided yet (`sweep`,
+   `instrumentation.ts`), so a buyer who paid and closed the page still gets the tickets.
 4. **Paid:** the buyer becomes a member like the members app's Admin > Members > New does it: a new
    account "pending activation" with the order's tier (the highest of the order) and a CJ300 number,
    or the existing member's tier goes up; each ticket bought gives its ticket types with QR codes.
    No activation link is sent: staff send the invitation from the members app (Admin > Members >
    Re-send invitation). Email: "Your payment is confirmed".
 5. **Declined or cancelled:** once per order, "One more step to join us". Its "Complete your
-   payment" (`/shop/retry/<ref>`) makes a new order for the same tickets and opens Telr; its
-   "Alternative payment option" goes to `SHOP_ALT_PAYMENT_URL`.
+   payment" (`/shop/retry/<ref>`) makes a new order for the same tickets (IFZA takes each reference
+   once) and opens its payment page; its "Alternative payment option" goes to `SHOP_ALT_PAYMENT_URL`.
 
-Telr also emails its own receipt to the address typed on its page (switched off at Telr).
+An order holds its tickets for 30 minutes, as long as an IFZA payment lasts: after that `/pay`
+offers "Start again" (a new order, stock checked again).
 
 | File | |
 |---|---|
 | `lib/shop/products.ts` | what's sold: per tier and day package the price, the tier it gives and its ticket types (FRI, SAT, SUN, AFTER; Ultra Black also PARK), stock |
-| `lib/shop/orders.ts` | event, prices and stock for the site, orders, payment link, Telr's answers, retry |
+| `lib/shop/orders.ts` | event, prices and stock for the site, orders, payment (prepare, card, status, sweep), retry |
 | `lib/shop/fulfil.ts` | member, membership and tickets after payment |
-| `lib/shop/telr.ts` | Telr's order.json (create, check) |
+| `lib/shop/ifza.ts` | IFZA's payment API (create, checkout, status) |
 | `lib/shop/email.ts`, `templates.ts` | the two emails |
 | `lib/shop/admin.ts` | the sales dashboard's API |
 | `lib/shop/db.ts` | the database (MySQL, `mysql2`); makes the shop's tables on first use |
-| `app/Api/Eventsnew/[name]`, `app/shop/...` | the HTTP routes |
+| `app/Api/Eventsnew/[name]`, `app/shop/...`, `app/api/pay`, `app/api/pay/status` | the HTTP routes |
+| `app/pay/[ref]`, `components/CardPayment.tsx` | the payment page with Telr's card fields |
 
-The currency (`SHOP_CURRENCY`, USD) must be one the Telr store accepts, else Telr refuses the order
-(E05) and `/summary` says "Payment isn't available for your order right now".
+The currency (`SHOP_CURRENCY`, USD) must be one IFZA's store accepts, else IFZA refuses the
+payment and `/summary` says "Payment isn't available for your order right now". The return domain
+(`SHOP_PUBLIC_URL`, else `SHOP_SITE_URL`, https) must be registered with IFZA.
 
 Security:
 
 - **The site calls the shop directly**, not over HTTP. Its HTTP routes `Api/Eventsnew/...` and
   `shop/admin/...` are no longer used by the site and answer 401 without `SHOP_ADMIN_KEY` as a
   bearer token (`lib/shop/key.ts`), so every order passes the checkout's checks (age, terms, ...).
-  `shop/pay`, `shop/telr`, `shop/retry` and `shop/email` stay open: buyers, Telr and the emails use them.
-- **Payment status comes from Telr only**, never from a request; cart, amount, currency and test
-  flag must match the order.
+  `shop/pay`, `shop/return`, `shop/retry` and `shop/email` stay open: buyers, the bank check and the emails use them.
+- **Payment status comes from IFZA only** (`PAID`), never from a request; reference, payment id,
+  amount and currency must match the order.
+- **The API key stays on the server** (`IFZA_API_KEY`, sent in `X-Api-Key`), never in the browser.
+- **Content-Security-Policy:** Telr's script and frames (`secure.telr.com`) are allowed on `/pay/<ref>`
+  only; only `/shop/return/<ref>` may be framed, by this site only (`next.config.ts`).
 - **Unpaid orders** (in the last hour): 5 per email and 20 per buyer address (`X-Forwarded-For`,
   as the proxy in front of the site passes it), so nobody fills the orders or sends "One more step
   to join us" to someone else's email over and over.
@@ -109,23 +126,22 @@ All settings are in one file, `.env` (or the server's environment), in blocks wi
 
 ```bash
 ALFRED_UAE_URL=https://tiqs.it              # optional: old Alfred ticket emails' links (PDF, QR) keep working; read at build time
-IP_ALLOWLIST="127.0.0.1, ::1"               # optional: only these addresses/ranges reach the site at all (pages, APIs, files, Telr's callbacks: add Telr's IPs); others get 403. Empty = off. Uses the last X-Forwarded-For entry, so the site must listen on 127.0.0.1 behind nginx (lib/ip-allowlist.ts)
+IP_ALLOWLIST="127.0.0.1, ::1"               # optional: only these addresses/ranges reach the site at all (pages, APIs, files, the bank check's return); others get 403. Empty = off. Uses the last X-Forwarded-For entry, so the site must listen on 127.0.0.1 behind nginx (lib/ip-allowlist.ts)
 MAINTENANCE_MODE=true                       # optional: visitors get the pre-registration page (below); /admin, the ticket shop's routes and ticket email links stay open; restart to apply
 MAINTENANCE_KEY=long-random-text            # optional: developers open the site once with ?dev=<this key> during maintenance
 
 # the database: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME (above)
 SHOP_EVENT=abu-dhabi-2026                   # the event on sale, by its slug (members app: Admin > Events)
 SHOP_CURRENCY=USD
-SHOP_SITE_URL=https://clubjoia300.com       # this site: Telr's return, the payment and email links
+SHOP_SITE_URL=https://clubjoia300.com       # this site: the payment page, the bank check's return (IFZA's registered return domain), email links
 SHOP_SUPPORT_PHONE="+971 ..."               # the phone in the emails, else the event's support phone
 SHOP_ALT_PAYMENT_URL=                       # optional: "Alternative payment option", default <SHOP_SITE_URL>/tickets
 SHOP_TIMEZONE=Asia/Dubai                    # optional: the sales dashboard's days
 SHOP_ADMIN_KEY=long-random-text             # 16+ characters: the key of the ticket and dashboard APIs, and the dashboard cookie's
 SALES_DASHBOARD=on                          # the sales dashboard (/admin, /shop/admin) is closed (404) unless this is "on"
 MFA_ENCRYPTION_KEY=...                      # the members app's MFA_ENCRYPTION_KEY, same value: dashboard sign-in checks the admins' authenticator codes
-TELR_STORE_ID=...                           # Telr: Integrations > Hosted Payment Page > Request Authentication
-TELR_AUTH_KEY=...
-TELR_TEST=1                                 # 1 test payments, 0 live
+IFZA_API_KEY=ifza_ik_live_...               # issued by IFZA (starts in test mode); server only, never in the browser
+IFZA_STORE=Elixium-Events-Test              # IFZA, IFZA-Test, Elixium-Events or Elixium-Events-Test: a -Test store while the key is in test mode
 EMAIL_DRIVER=postmark                       # postmark sends the emails through Postmark, smtp through SMTP_URL, console only writes them to the log
 EMAIL_FROM="CLUB JOIA 300 <noreply@clubjoia300.com>"   # must be a confirmed Sender Signature (or verified domain) in Postmark
 POSTMARK_SERVER_TOKEN=...                   # Postmark: Servers > <server> > API Tokens; the server's IP must be in Postmark's IP allow list
@@ -136,7 +152,8 @@ PREREG_NOTIFY_EMAIL=team@example.com         # optional: the team inbox told abo
 PREREG_SEND_CONFIRMATION=1                  # optional: 0 sends the guest no "we received it" email
 ```
 
-In Telr's dashboard, the transaction advice URL is `<SHOP_SITE_URL>/shop/telr/advice`.
+IFZA's test cards (test store, any future expiry): 4111 1111 1111 1111 with CVV 123 approved,
+999 on hold, 041 declined.
 
 ## Pre-registration page (maintenance mode)
 
@@ -176,11 +193,10 @@ server and its APIs, and signs the dashboard's cookie.
 
 1. The site and the database are on the same server. Make the site's database user there yourself,
    with the permissions above, and put it in `.env` (`DB_HOST="127.0.0.1"`).
-2. `.env` as above (`TELR_TEST=1` first; `.env` isn't in git, put it on the server yourself), then
+2. `.env` as above (`IFZA_STORE` a `-Test` store first; `.env` isn't in git, put it on the server yourself), then
    `npm ci && npm run build`, `npm run db:setup` (makes the site's tables now: it prints which
    database it used, or why it failed) and restart. The database user needs CREATE for that.
-3. In Telr's dashboard: transaction advice URL `https://clubjoia300.com/shop/telr/advice`, and the
-   store accepting USD.
-4. Buy once (paid and declined) from the live site and check the emails, the member and tickets in
-   the members app, and `/admin`. Then `TELR_TEST=0` when Telr has approved the store, and switch
-   `MAINTENANCE_MODE` off.
+3. IFZA: the return domain `https://clubjoia300.com` registered, the store accepting USD.
+4. Buy once with IFZA's test cards (paid, declined, cancelled) and check the emails, the member and
+   tickets in the members app, and `/admin`. Then ask IFZA to switch the key to production, set the
+   live store (`IFZA_STORE=Elixium-Events` or `IFZA`), restart, and switch `MAINTENANCE_MODE` off.

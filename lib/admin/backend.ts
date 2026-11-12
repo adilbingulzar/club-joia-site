@@ -39,7 +39,7 @@ export type OrderList = { total: number; page: number; perPage: number; orders: 
 export type OrderDetail = OrderRow & {
   fulfilledAt: string | null;
   updatedAt: string;
-  telr: { ref: string | null; status: number | null };
+  payment: { id: string | null; status: string | null };
   member: { number: string; email: string; account: string; tier: string | null; membership: string | null } | null;
   ticketList: { number: string; code: string; name: string; status: string }[];
 };

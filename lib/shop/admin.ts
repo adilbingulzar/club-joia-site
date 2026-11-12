@@ -326,7 +326,7 @@ async function order(ref: string): Promise<Answer> {
       items: o.items,
       fulfilledAt: o.fulfilled_at,
       updatedAt: o.updated_at,
-      telr: { ref: o.telr_ref, status: o.telr_status },
+      payment: { id: o.pay_id, status: o.pay_status },
       member: member ? { number: member.membership_number, email: member.email, account: member.account, tier: member.tier, membership: member.membership } : null,
       ticketList: tickets
     })

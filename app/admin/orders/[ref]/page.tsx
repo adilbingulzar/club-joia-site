@@ -8,8 +8,11 @@ import { StatusBadge, TopBar } from '@/components/admin/Shell';
 
 type Props = { params: Promise<{ ref: string }> };
 
-// Telr's order.status.code
-const TELR: Record<number, string> = { 1: 'Pending', 2: 'Authorised (on hold)', 3: 'Paid', 4: 'Payment requested', [-1]: 'Expired', [-2]: 'Cancelled', [-3]: 'Declined', [-4]: 'Replaced' };
+// IFZA's payment status (lib/shop/ifza.ts), and ours while the card is with the bank
+const PAYMENT: Record<string, string> = {
+  PAID: 'Paid', CREATED: 'Waiting for the card', PENDING: 'Processing', ON_HOLD: 'On hold (review)', DECLINED: 'Declined',
+  CANCELLED: 'Cancelled', EXPIRED: 'Expired', CHECKED_OUT: 'With the bank (3-D Secure)', REFUSED: 'Card refused'
+};
 
 export default async function AdminOrderPage({ params }: Props) {
   const user = await requireAdmin();
@@ -53,7 +56,7 @@ export default async function AdminOrderPage({ params }: Props) {
             <dl className="adm-dl">
               <dt>Amount</dt><dd className="adm-num">{money(o.amount, o.currency)}</dd>
               <dt>Status</dt><dd><StatusBadge status={o.status} /></dd>
-              <dt>Telr</dt><dd>{o.telr.ref ? o.telr.ref + (o.telr.status !== null ? ' · ' + (TELR[o.telr.status] || 'status ' + o.telr.status) : '') : 'Not sent to Telr'}</dd>
+              <dt>Payment (IFZA)</dt><dd>{o.payment.id ? o.payment.id + (o.payment.status ? ' · ' + (PAYMENT[o.payment.status] || o.payment.status) : '') : 'Not started'}</dd>
               <dt>Ordered</dt><dd>{dateTime(o.createdAt)}</dd>
               <dt>Paid</dt><dd>{o.paidAt ? dateTime(o.paidAt) : '—'}</dd>
               <dt>Tickets issued</dt><dd>{o.fulfilledAt ? dateTime(o.fulfilledAt) : '—'}</dd>

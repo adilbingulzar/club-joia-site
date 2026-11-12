@@ -7,7 +7,7 @@
  * A new account is left "pending activation" without an activation link: staff send the
  * invitation from the members app (Admin > Members > Re-send invitation).
  *
- * Once per order (shop.orders.fulfilled_at), whichever of Telr's return and transaction advice
+ * Once per order (shop.orders.fulfilled_at), whichever of the buyer's return and the status sweep
  * comes first. The email goes after the commit.
  */
 import { shopConfig as config } from './config';

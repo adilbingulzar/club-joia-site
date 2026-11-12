@@ -25,7 +25,7 @@ const PAGE = '/preregister/index.html';
 // The paths maintenance mode closes, as a whole-path pattern:
 // static build files can't reveal anything on their own and ticket emails must keep working (next.config.ts);
 // the sales dashboard (/admin, with the logo it shows) has its own sign-in;
-// the ticket shop's APIs (Api/Eventsnew, shop/) are called by this site's own server, Telr and the emails;
+// the ticket shop's APIs (Api/Eventsnew, shop/) are called by this site's own server, the bank check's return and the emails;
 // the pre-registration page (preregister/), its privacy notice (privacy) and form (api/preregister) are what visitors get;
 // everything else, API included, goes to the pre-registration page.
 export const MAINTENANCE_PATHS = '/((?!_next/static|_next/image|booking_events/pdf/|Ajaxdorian/getQrcodeImage/|uploads/qrcodes/|assets/(?!img/)|assets/img/logo\\.png$|admin(?:/|$)|Api/Eventsnew/|shop/|preregister/|privacy$|api/preregister$|ticketing/download|downloadticketpdf/).*)';

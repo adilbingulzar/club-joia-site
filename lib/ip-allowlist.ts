@@ -1,6 +1,6 @@
 /*
  * IP allowlist (proxy.ts): with IP_ALLOWLIST set, every request (pages, APIs, files, the ticket
- * shop's routes, Telr's callbacks) from an address outside it gets 403. Empty or unset: off.
+ * shop's routes, the bank check's return) from an address outside it gets 403. Empty or unset: off.
  *
  *   IP_ALLOWLIST="127.0.0.1, ::1, 203.0.113.7, 10.0.0.0/8, 2001:db8::/32"
  *

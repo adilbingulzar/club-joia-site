@@ -105,7 +105,14 @@ async function migrate(): Promise<void> {
       telr_url         VARCHAR(1000) NULL,
       telr_status      INT NULL,
       telr_create      JSON NULL,
-      telr_check       JSON NULL,
+      telr_check       JSON NULL,                       -- telr_*: orders paid before IFZA (direct Telr)
+      pay_id           VARCHAR(191) NULL,               -- pay_*: the IFZA payment (lib/shop/ifza.ts)
+      pay_status       VARCHAR(20) NULL,
+      pay_init         JSON NULL,                       -- telr_init for the card fields
+      pay_expires_at   DATETIME(3) NULL,
+      pay_checkout_at  DATETIME(3) NULL,                -- card sent (checked out, once)
+      pay_create       JSON NULL,
+      pay_check        JSON NULL,
       member_id        VARCHAR(191) NULL,
       tickets          JSON NULL,                       -- the ticket numbers made
       error            TEXT NULL,
@@ -119,7 +126,8 @@ async function migrate(): Promise<void> {
       KEY orders_status_created (status, created_at),
       KEY orders_email (email, created_at),
       KEY orders_ip (ip, created_at),
-      KEY orders_retry_of (retry_of)
+      KEY orders_retry_of (retry_of),
+      KEY orders_sweep (status, pay_checkout_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     // failed sign-ins of the sales dashboard, per email and address (lib/shop/admin.ts)
     `CREATE TABLE IF NOT EXISTS shop.sign_in_failures (
@@ -164,6 +172,20 @@ async function migrate(): Promise<void> {
     "INSERT IGNORE INTO shop.locks (name) VALUES ('stock')"
   ];
   for (const sql of tables) await run(pool(), sql);
+  // orders tables made before IFZA payments: add its columns
+  const payCols = await run(pool(),
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'shop_orders' AND column_name = 'pay_id' LIMIT 1");
+  if (!payCols.rows.length) {
+    await run(pool(), `ALTER TABLE shop.orders
+      ADD COLUMN pay_id VARCHAR(191) NULL AFTER telr_check,
+      ADD COLUMN pay_status VARCHAR(20) NULL AFTER pay_id,
+      ADD COLUMN pay_init JSON NULL AFTER pay_status,
+      ADD COLUMN pay_expires_at DATETIME(3) NULL AFTER pay_init,
+      ADD COLUMN pay_checkout_at DATETIME(3) NULL AFTER pay_expires_at,
+      ADD COLUMN pay_create JSON NULL AFTER pay_checkout_at,
+      ADD COLUMN pay_check JSON NULL AFTER pay_create,
+      ADD KEY orders_sweep (status, pay_checkout_at)`);
+  }
   // tables made before one row per submission: email was unique there
   const unique = await run(pool(),
     "SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'pre_registrations' AND index_name = 'registrations_email' AND non_unique = 0 LIMIT 1");

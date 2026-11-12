@@ -47,3 +47,39 @@ export async function guarded(what: string, run: () => Promise<Response>, fallba
     return fallback();
   }
 }
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
+}
+
+// a small page that takes the whole window (out of the frame) to the site's page
+export function breakOut(url: string): Response {
+  const js = JSON.stringify(url).replace(/</g, '\\u003c');
+  const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex">' +
+    '<title>Club JOIA 300</title></head><body style="background:#050505;color:#f5f3ee;font-family:sans-serif;text-align:center;padding:40px 16px">' +
+    '<p>Checking your payment…</p><p><a style="color:inherit" target="_top" href="' + escapeHtml(url) + '">Continue</a></p>' +
+    '<script>(function(){var u=' + js + ';try{window.top.location.replace(u);}catch(e){location.replace(u);}})();</script>' +
+    '</body></html>';
+  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Next-Page': url } });
+}
+
+/*
+ * The return page inside the bank check's frame (IFZA's guide, "Your return page"): tells the payment
+ * page (/pay/<ref>, components/CardPayment.tsx, the top window, also when the gateway's page nests
+ * frames) with postMessage, only to this site's own origin; that page asks the server for the status. A JSON text, which Telr's SDK on that page ignores.
+ * Without a parent (a bank that left the frame) it goes on as the whole page: next = the same
+ * address, which then checks the status itself.
+ */
+export const RETURN_MESSAGE = 'cj300-payment-return';
+
+export function tellParent(ref: string, paymentId: string, wholePage: string): Response {
+  const msg = JSON.stringify(JSON.stringify({ type: RETURN_MESSAGE, ref, paymentId })).replace(/</g, '\\u003c');
+  const next = JSON.stringify(wholePage).replace(/</g, '\\u003c');
+  const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex">' +
+    '<title>Club JOIA 300</title></head><body style="background:#fff;color:#111;font-family:sans-serif;text-align:center;padding:40px 16px">' +
+    '<p>Checking your payment…</p>' +
+    '<script>(function(){if(window.top&&window.top!==window){window.top.postMessage(' + msg + ',location.origin);}' +
+    'else{location.replace(' + next + ');}})();</script>' +
+    '</body></html>';
+  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Return': 'frame' } });
+}

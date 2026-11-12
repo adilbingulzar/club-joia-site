@@ -1,7 +1,8 @@
 /*
- * End-to-end test of the ticket shop's APIs (app/Api/Eventsnew, app/shop) on a real database with a
- * stand-in Telr: the site's calls, Telr's return and advice, the member and tickets made, the
- * emails, retry, and the sales dashboard's API. Removes what it made.
+ * End-to-end test of the ticket shop's APIs (app/Api/Eventsnew, app/shop, app/api/pay) on a real
+ * database with a stand-in IFZA: the site's calls, the payment (create, card, bank check's return,
+ * status sweep), the member and tickets made, the emails, retry, and the sales dashboard's API.
+ * Removes what it made.
  *
  * Needs a local or test copy of the members app's MySQL database (never the live one), with the
  * event, its tiers and ticket types, and the demo staff accounts (the members app's seed):
@@ -26,9 +27,11 @@ const MFA_KEY = 'shop-test-mfa-key-shop-test-mfa-key-0001';
 const MFA_SECRET = generateTotpSecret();
 let adminMfa: { id: string; mfa_enabled: number; mfa_secret_encrypted: string | null; mfa_enrolled_at: string | null; mfa_last_used_step: number | null } | null = null;
 
-// ─── Stand-in Telr: create and check, POST /control sets what a check answers for a cart ───
-const telrOrders: Record<string, { cartid: string; amount: string; currency: string; test: string }> = {};
-const answers: Record<string, { code: number; amount?: string; currency?: string; test?: number }> = {};
+// ─── Stand-in IFZA: create, checkout and status; answers[reference] sets what a status says ───
+const IFZA_KEY = 'ifza_ik_live_TESTKEY_0123456789';
+type StubPayment = { id: string; reference: string; amount: number; currency: string; status: string; checkedOut: boolean; customer: Record<string, string> };
+const payments: Record<string, StubPayment> = {};
+const answers: Record<string, { status: string; amount?: number; currency?: string; reference?: string }> = {};
 let creates = 0;
 let stub: http.Server;
 
@@ -38,26 +41,39 @@ function startStub(): Promise<string> {
     req.on('data', function (c) { body += c; });
     req.on('end', function () {
       const p = body ? JSON.parse(body) : {};
-      const send = function (o: unknown) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
-      if (!p.store || !p.authkey) return send({ method: p.method, error: { message: 'E01 store/authkey missing' } });
-      if (p.method === 'create') {
-        if (Object.values(telrOrders).some(function (o) { return o.cartid === p.order.cartid; })) return send({ method: 'create', error: { message: 'E56 duplicate cartid' } });
+      const send = function (status: number, o: unknown) { res.writeHead(status, { 'Content-Type': 'application/json', 'X-Api-Key-Mode': 'test' }); res.end(JSON.stringify(o)); };
+      if (req.headers['x-api-key'] !== IFZA_KEY) return send(401, { ok: false, error: 'invalid_key' });
+      if (req.url === '/api/integrations/v1/payments') {
+        const c = p.customer || {};
+        if (p.store !== 'Elixium-Events-Test' || !(p.amount > 0) || !p.reference || !p.return_url || !c.address1 || !c.city || !/^[A-Z]{2}$/.test(c.country || '')) {
+          return send(422, { ok: false, error: 'validation_error', issues: [{ path: 'customer' }] });
+        }
+        if (Object.values(payments).some(function (x) { return x.reference === p.reference; })) return send(409, { ok: false, error: 'duplicate_reference' });
         creates++;
-        const ref = 'STUBREF' + creates;
-        telrOrders[ref] = { cartid: p.order.cartid, amount: p.order.amount, currency: p.order.currency, test: p.order.test };
-        return send({ method: 'create', order: { ref, url: 'https://secure.telr.example/gateway/process.html?o=' + ref } });
+        const id = 'pay_stub' + creates;
+        payments[id] = { id, reference: p.reference, amount: p.amount, currency: p.currency, status: 'CREATED', checkedOut: false, customer: c };
+        return send(200, { ok: true, payment_id: id, expires_at: new Date(Date.now() + 30 * 60000).toISOString(), telr_init: { store_id: 12345, currency: p.currency, test_mode: 1 } });
       }
-      if (p.method === 'check') {
-        const o = telrOrders[p.order.ref];
-        if (!o) return send({ method: 'check', error: { message: 'E05 order not found' } });
-        const a = answers[o.cartid] || { code: 1 };
-        return send({ method: 'check', order: { ref: p.order.ref, cartid: o.cartid, test: a.test !== undefined ? a.test : Number(o.test), amount: a.amount || o.amount, currency: a.currency || o.currency, status: { code: a.code, text: 'stub' } } });
+      if (req.url === '/api/integrations/v1/payments/checkout') {
+        const x = payments[p.payment_id];
+        if (!p.payment_id || !p.card_token) return send(422, { ok: false, error: 'validation_error' });
+        if (!x) return send(404, { ok: false, error: 'not_found' });
+        if (x.checkedOut) return send(409, { ok: false, error: 'already_checked_out' });
+        x.checkedOut = true;
+        if (p.card_token === 'refused') { x.status = 'DECLINED'; return send(502, { ok: false, error: 'telr_error', message: 'Card refused' }); }
+        return send(200, { ok: true, order_url: 'https://secure.telr.example/gateway/process_framed.html?o=' + x.id });
       }
-      send({ error: { message: 'unknown method' } });
+      if (req.url === '/api/integrations/v1/payments/status') {
+        const x = payments[p.payment_id];
+        if (!x) return send(404, { ok: false, error: 'not_found' });
+        const a = answers[x.reference] || { status: x.status };
+        return send(200, { ok: true, payment_id: x.id, reference: a.reference || x.reference, status: a.status, amount: a.amount !== undefined ? a.amount : x.amount, currency: a.currency || x.currency, transaction_ref: '0400' + x.id });
+      }
+      send(404, { ok: false, error: 'not_found' });
     });
   });
   return new Promise(function (resolve) {
-    stub.listen(0, '127.0.0.1', function () { resolve('http://127.0.0.1:' + (stub.address() as AddressInfo).port + '/gateway/order.json'); });
+    stub.listen(0, '127.0.0.1', function () { resolve('http://127.0.0.1:' + (stub.address() as AddressInfo).port); });
   });
 }
 
@@ -67,7 +83,8 @@ let routes: {
   api: { POST: (r: Request, c: Ctx<{ name: string }>) => Promise<Response> };
   pay: { GET: (r: Request, c: Ctx<{ ref: string }>) => Promise<Response> };
   ret: { GET: (r: Request, c: Ctx<{ ref: string }>) => Promise<Response> };
-  advice: { POST: (r: Request) => Promise<Response> };
+  card: { POST: (r: Request) => Promise<Response> };
+  status: { POST: (r: Request) => Promise<Response> };
   retry: { GET: (r: Request, c: Ctx<{ ref: string }>) => Promise<Response> };
   admin: { GET: (r: Request, c: Ctx<{ path: string[] }>) => Promise<Response>; POST: (r: Request, c: Ctx<{ path: string[] }>) => Promise<Response> };
   prereg: { POST: (r: Request) => Promise<Response> };
@@ -90,17 +107,37 @@ async function api(name: string, form: Record<string, string>, key = ADMIN_KEY) 
   return { status: r.status, body: /json/.test(r.headers.get('content-type') || '') ? JSON.parse(text) : text };
 }
 
-// a GET of a /shop/... link: { status, location }
+// a GET of a /shop/... link: { status, location } (the return page's is where it sends the window)
 async function get(url: string) {
   const path = new URL(url).pathname.split('/').map(decodeURIComponent);
   const req = new Request(url);
   let r: Response;
   if (path[2] === 'pay') r = await routes.pay.GET(req, { params: Promise.resolve({ ref: path[3] }) });
-  else if (path[2] === 'telr' && path[3] === 'return') r = await routes.ret.GET(req, { params: Promise.resolve({ ref: path[4] }) });
+  else if (path[2] === 'return') r = await routes.ret.GET(req, { params: Promise.resolve({ ref: path[3] }) });
   else if (path[2] === 'retry') r = await routes.retry.GET(req, { params: Promise.resolve({ ref: path[3] }) });
   else throw new Error('no route for ' + url);
-  return { status: r.status, location: r.headers.get('location') };
+  return { status: r.status, location: r.headers.get('location') || r.headers.get('x-next-page') };
 }
+
+// the /pay page's work: the order's payment (lib/shop/orders preparePayment)
+async function payState(ref: string) {
+  return (await import('@/lib/shop/orders')).preparePayment(ref);
+}
+
+// the card form's token sent (app/api/pay): { status, body }
+async function card(ref: string, token = 'tok_ok') {
+  const r = await routes.card.POST(new Request(SITE + '/api/pay', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref, token }) }));
+  return { status: r.status, body: await r.json() };
+}
+
+// a payment up to the bank's check: the page, then the card
+async function toBank(ref: string) {
+  expect((await payState(ref))!.state).toBe('ready');
+  const c = await card(ref);
+  expect(c.body.orderUrl).toMatch(/^https:\/\/secure\.telr\.example\//);
+}
+
+const back = function (ref: string) { return SITE + '/shop/return/' + encodeURIComponent(ref) + '?payment_id=x&outcome=authorised'; };
 
 function buyer(extra: Record<string, string> = {}) {
   return Object.assign({
@@ -109,8 +146,8 @@ function buyer(extra: Record<string, string> = {}) {
   }, extra);
 }
 
-function order(lines: [string, number][]) {
-  const form: Record<string, string> = buyer();
+function order(lines: [string, number][], to = email) {
+  const form: Record<string, string> = buyer({ email: to });
   lines.forEach(function (l, i) { form['tickets[' + i + '][ticketId]'] = l[0]; form['tickets[' + i + '][quantity]'] = String(l[1]); });
   return api('buyTickets', form);
 }
@@ -143,7 +180,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
   beforeAll(async function () {
     Object.assign(process.env, {
       ...dbEnv(DB_URL), SHOP_EVENT: EVENT, SHOP_CURRENCY: 'USD', SHOP_SITE_URL: SITE, SHOP_PUBLIC_URL: '',
-      SHOP_ADMIN_KEY: ADMIN_KEY, TELR_STORE_ID: '1', TELR_AUTH_KEY: 'test', TELR_TEST: '1', TELR_URL: await startStub(),
+      SHOP_ADMIN_KEY: ADMIN_KEY, IFZA_API_KEY: IFZA_KEY, IFZA_STORE: 'Elixium-Events-Test', IFZA_URL: await startStub(),
       EMAIL_DRIVER: 'console', SHOP_SUPPORT_PHONE: '+971 50 000 0000', PREREG_NOTIFY_EMAIL: 'team@example.com', PREREG_SEND_CONFIRMATION: '1',
       MFA_ENCRYPTION_KEY: MFA_KEY
     });
@@ -154,8 +191,9 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     routes = {
       api: await import('@/app/Api/Eventsnew/[name]/route'),
       pay: await import('@/app/shop/pay/[ref]/route'),
-      ret: await import('@/app/shop/telr/return/[ref]/route'),
-      advice: await import('@/app/shop/telr/advice/route'),
+      ret: await import('@/app/shop/return/[ref]/route'),
+      card: await import('@/app/api/pay/route'),
+      status: await import('@/app/api/pay/status/route'),
       retry: await import('@/app/shop/retry/[ref]/route'),
       admin: await import('@/app/shop/admin/[...path]/route'),
       prereg: await import('@/app/api/preregister/route')
@@ -220,18 +258,35 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     ref1 = refOf(o1.body.paymentUrl);
     expect(await one('SELECT amount, currency, status FROM shop.orders WHERE ref = $1', [ref1])).toEqual({ amount: '21000.00', currency: 'USD', status: 'pending' });
 
+    // the payment link: the site's payment page
     const pay = await get(o1.body.paymentUrl);
-    expect(pay.status).toBe(302);
-    expect(pay.location).toMatch(/^https:\/\/secure\.telr\.example\//);
-    expect((await get(o1.body.paymentUrl)).location).toBe(pay.location);
-    expect(creates).toBe(1);
+    expect(pay).toEqual({ status: 302, location: SITE + '/pay/' + ref1 });
 
-    const ret = SITE + '/shop/telr/return/' + encodeURIComponent(ref1);
-    expect((await get(ret)).location).toBe(SITE + '/payment/pending?orderid=' + ref1);
-    answers[ref1] = { code: 3, amount: '20000.00' };
-    expect((await get(ret)).location).toBe(SITE + '/payment/pending?orderid=' + ref1);
-    answers[ref1] = { code: 3 };
-    expect((await get(ret)).location).toBe(SITE + '/thank-you?orderid=' + ref1);
+    // the page makes the IFZA payment once, with the billing address and our amount
+    const ready = await payState(ref1);
+    expect(ready).toMatchObject({ state: 'ready', ref: ref1, amount: 21000, currency: 'USD', init: { store_id: 12345, currency: 'USD', test_mode: 1 } });
+    expect((await payState(ref1))!.state).toBe('ready');
+    expect(creates).toBe(1);
+    const p1 = Object.values(payments).find(function (x) { return x.reference === ref1; })!;
+    expect(p1).toMatchObject({ amount: 21000, currency: 'USD' });
+    expect(p1.customer).toMatchObject({ address1: 'Street 1', city: 'Lahore', country: 'PK', firstName: 'Shop', lastName: 'Tester', phone: '+923001234567' });
+    const row = await one('SELECT pay_id, pay_status, pay_expires_at > UTC_TIMESTAMP(3) AS open FROM shop.orders WHERE ref = $1', [ref1]);
+    expect(row).toMatchObject({ pay_id: p1.id, pay_status: 'CREATED', open: 1 });
+
+    // the card: the bank's check; the same payment can't be checked out twice
+    expect((await card(ref1, '')).status).toBe(400);
+    const c1 = await card(ref1);
+    expect(c1).toEqual({ status: 200, body: { orderUrl: 'https://secure.telr.example/gateway/process_framed.html?o=' + p1.id } });
+    expect((await payState(ref1))).toEqual({ state: 'done', page: SITE + '/payment/pending?orderid=' + ref1 });
+
+    // back from the bank: only IFZA's PAID of our amount counts, never the outcome in the address
+    expect((await get(back(ref1))).location).toBe(SITE + '/payment/pending?orderid=' + ref1);
+    answers[ref1] = { status: 'PAID', amount: 20000 };
+    expect((await get(back(ref1))).location).toBe(SITE + '/payment/pending?orderid=' + ref1);
+    answers[ref1] = { status: 'PAID', currency: 'AED' };
+    expect((await get(back(ref1))).location).toBe(SITE + '/payment/pending?orderid=' + ref1);
+    answers[ref1] = { status: 'PAID' };
+    expect((await get(back(ref1))).location).toBe(SITE + '/thank-you?orderid=' + ref1);
 
     const done = await one('SELECT * FROM shop.orders WHERE ref = $1', [ref1]);
     expect(done).toMatchObject({ status: 'paid', error: null });
@@ -258,10 +313,10 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     });
     expect((await one('SELECT COUNT(*) AS n FROM ticket_credentials c JOIN tickets t ON t.id = c.ticket_id WHERE t.member_id = $1 AND c.revoked_at IS NULL', [member.id])).n).toBe(10);
 
-    const advice = await routes.advice.POST(new Request(SITE + '/shop/telr/advice', { method: 'POST', body: new URLSearchParams({ tran_cartid: ref1, tran_status: 'A' }) }));
-    expect(advice.status).toBe(200);
+    // a second return (or the sweep) makes nothing twice
+    expect((await get(back(ref1))).location).toBe(SITE + '/thank-you?orderid=' + ref1);
     expect((await one('SELECT COUNT(*) AS n FROM tickets WHERE member_id = $1', [member.id])).n).toBe(10);
-    expect((await routes.advice.POST(new Request(SITE + '/shop/telr/advice', { method: 'POST', body: '' }))).status).toBe(400);
+    expect((await card(ref1)).body).toEqual({ page: SITE + '/thank-you?orderid=' + ref1 });
 
     const log = mails.join('\n');
     expect(log).toContain('Subject: Your payment is confirmed – Club JOIA 300');
@@ -275,9 +330,14 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
   it('order 2: the same member is upgraded', async function () {
     const o2 = await order([['ultra-black/fri-sun', 1]]);
     ref2 = refOf(o2.body.paymentUrl);
-    await get(o2.body.paymentUrl);
-    answers[ref2] = { code: 3 };
-    expect((await get(SITE + '/shop/telr/return/' + ref2)).location).toBe(SITE + '/thank-you?orderid=' + ref2);
+    await toBank(ref2);
+    // the buyer pays and closes the page: the sweep finds it (orders untouched for 2 minutes)
+    answers[ref2] = { status: 'PAID' };
+    const { sweep } = await import('@/lib/shop/orders');
+    await pool.query('UPDATE shop.orders SET updated_at = UTC_TIMESTAMP(3) - INTERVAL 5 MINUTE WHERE ref = $1', [ref2]);
+    expect(await sweep(100)).toBeGreaterThanOrEqual(1);
+    expect(await one('SELECT status, fulfilled_at IS NOT NULL AS done FROM shop.orders WHERE ref = $1', [ref2])).toEqual({ status: 'paid', done: 1 });
+    expect((await get(back(ref2))).location).toBe(SITE + '/thank-you?orderid=' + ref2);
     expect((await one('SELECT COUNT(*) AS n FROM users WHERE lower(email) = lower($1)', [email])).n).toBe(1);
     const ms = (await pool.query('SELECT t.slug FROM memberships m JOIN membership_tiers t ON t.id = m.tier_id WHERE member_id = $1', [memberId])).rows;
     expect(ms).toEqual([{ slug: 'ultra-black' }]);
@@ -289,33 +349,77 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
   it('declined: one email with a retry link, which starts a new order', async function () {
     const o3 = await order([['ruby-red/fri-sat', 1]]);
     ref3 = refOf(o3.body.paymentUrl);
-    await get(o3.body.paymentUrl);
-    answers[ref3] = { code: -3 };
-    expect((await get(SITE + '/shop/telr/return/' + ref3)).location).toBe(SITE + '/payment/denied?orderid=' + ref3);
+    await toBank(ref3);
+    answers[ref3] = { status: 'DECLINED' };
+    expect((await get(back(ref3))).location).toBe(SITE + '/payment/denied?orderid=' + ref3);
     const retryLink = SITE + '/shop/retry/' + ref3;
     expect(mails.join('\n')).toContain('Subject: One more step to join us');
     expect(mails.join('\n')).toContain('Complete your payment: ' + retryLink);
-    await get(SITE + '/shop/telr/return/' + ref3);
+    await get(back(ref3));
     expect(mails.join('\n').split('Complete your payment: ' + retryLink)).toHaveLength(2);
 
     const again = await get(retryLink);
     expect(again.status).toBe(302);
     ref3b = decodeURIComponent(String(again.location).split('/shop/pay/')[1] || '');
     expect(await one('SELECT retry_of, amount, status FROM shop.orders WHERE ref = $1', [ref3b])).toEqual({ retry_of: ref3, amount: '4000.00', status: 'pending' });
-    expect((await get(String(again.location))).location).toMatch(/^https:\/\/secure\.telr\.example\//);
-    answers[ref3b] = { code: 3 };
-    expect((await get(SITE + '/shop/telr/return/' + ref3b)).location).toBe(SITE + '/thank-you?orderid=' + ref3b);
+    expect((await get(String(again.location))).location).toBe(SITE + '/pay/' + ref3b);
+    await toBank(ref3b);
+    answers[ref3b] = { status: 'PAID' };
+    expect((await get(back(ref3b))).location).toBe(SITE + '/thank-you?orderid=' + ref3b);
     expect((await get(retryLink)).location).toBe(SITE + '/thank-you?orderid=' + ref3b);
   });
 
-  it('cancelled: the payment link doesn\'t reopen Telr', async function () {
+  it('cancelled: the payment link doesn\'t open the card form again', async function () {
     const o4 = await order([['ruby-red/fri-sat', 1]]);
     ref4 = refOf(o4.body.paymentUrl);
-    await get(o4.body.paymentUrl);
-    answers[ref4] = { code: -2 };
-    expect((await get(SITE + '/shop/telr/return/' + ref4)).location).toBe(SITE + '/payment/cancel?orderid=' + ref4);
+    await toBank(ref4);
+    answers[ref4] = { status: 'CANCELLED' };
+
+    // back inside the frame (IFZA's guide): the page only tells the payment page, which asks our server
+    const framed = await routes.ret.GET(new Request(back(ref4), { headers: { 'Sec-Fetch-Dest': 'iframe' } }), { params: Promise.resolve({ ref: ref4 }) });
+    expect(framed.headers.get('x-return')).toBe('frame');
+    const html = await framed.text();
+    expect(html).toContain('window.top.postMessage(');
+    expect(html).toContain('cj300-payment-return');
+    expect(html).toContain(',location.origin)');
+    expect(html).toContain('/shop/return/' + ref4 + '?payment_id=x&outcome=authorised&whole=1');
+    expect((await one('SELECT status FROM shop.orders WHERE ref = $1', [ref4])).status).toBe('pending');
+    const asked = await routes.status.POST(new Request(SITE + '/api/pay/status', { method: 'POST', body: JSON.stringify({ ref: ref4 }) }));
+    expect(await asked.json()).toEqual({ page: SITE + '/payment/cancel?orderid=' + ref4 });
+    expect((await routes.status.POST(new Request(SITE + '/api/pay/status', { method: 'POST', body: JSON.stringify({ ref: 'NOPE1' }) }))).status).toBe(404);
+
+    // as the whole page (or a browser that doesn't say): the server asks itself
+    expect((await get(back(ref4))).location).toBe(SITE + '/payment/cancel?orderid=' + ref4);
+    expect((await get(back(ref4) + '&whole=1')).location).toBe(SITE + '/payment/cancel?orderid=' + ref4);
     expect((await get(o4.body.paymentUrl)).location).toMatch(/\/shop\/ticketing_error/);
-    expect((await get(SITE + '/shop/telr/return/NOPE')).status).toBe(404);
+    expect(await payState(ref4)).toEqual({ state: 'done', page: SITE + '/payment/cancel?orderid=' + ref4 });
+    expect((await get(SITE + '/shop/return/NOPE')).status).toBe(404);
+  });
+
+  it('a card the gateway refuses: declined at once, with the retry email', async function () {
+    const o = await order([['ruby-red/fri-sat', 1]], 'shoptest+refused-' + Date.now() + '@example.com');
+    const ref = refOf(o.body.paymentUrl);
+    expect((await payState(ref))!.state).toBe('ready');
+    expect((await card(ref, 'refused')).body).toEqual({ page: SITE + '/payment/denied?orderid=' + ref });
+    expect(await one('SELECT status, pay_status FROM shop.orders WHERE ref = $1', [ref])).toEqual({ status: 'declined', pay_status: 'REFUSED' });
+    expect(mails.join('\n')).toContain('Complete your payment: ' + SITE + '/shop/retry/' + ref);
+  });
+
+  it('an order whose half hour is over: no payment, start again', async function () {
+    const late = 'shoptest+late-' + Date.now() + '@example.com';
+    const o = await order([['ruby-red/fri-sat', 1]], late);
+    const ref = refOf(o.body.paymentUrl);
+    await pool.query('UPDATE shop.orders SET created_at = created_at - INTERVAL 31 MINUTE WHERE ref = $1', [ref]);
+    const before = creates;
+    expect(await payState(ref)).toEqual({ state: 'expired', ref });
+    expect(creates).toBe(before);
+    // a payment made in time but now past IFZA's expiry
+    const o2 = await order([['ruby-red/fri-sat', 1]], late);
+    const ref2b = refOf(o2.body.paymentUrl);
+    expect((await payState(ref2b))!.state).toBe('ready');
+    await pool.query('UPDATE shop.orders SET pay_expires_at = UTC_TIMESTAMP(3) - INTERVAL 1 MINUTE WHERE ref = $1', [ref2b]);
+    expect(await payState(ref2b)).toEqual({ state: 'expired', ref: ref2b });
+    expect((await card(ref2b)).body).toEqual({ error: 'This payment has expired. Please start again: you have not been charged.', retry: false });
   });
 
   it('limits unpaid orders per email (5) and per address (20) in an hour', async function () {
@@ -399,7 +503,8 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     const detail = (await call('GET', 'orders/' + ref1, { user: id })).body.order;
     expect(detail.member.number).toMatch(/^CJ300-/);
     expect(detail.ticketList).toHaveLength(10);
-    expect(detail.telr.status).toBe(3);
+    expect(detail.payment).toMatchObject({ status: 'PAID' });
+    expect(detail.payment.id).toMatch(/^pay_stub/);
     expect((await call('GET', 'orders/NOPE', { user: id })).status).toBe(404);
   });
 

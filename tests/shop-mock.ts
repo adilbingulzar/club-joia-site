@@ -1,6 +1,6 @@
 /*
  * A stand-in for the ticket shop's functions the site calls (lib/shop/orders): events,
- * ticketTypes, soldOut, buyTickets, payUrl. Every answer can be replaced; null makes the call fail.
+ * ticketTypes, soldOut, buyTickets, preparePayment. Every answer can be replaced; null makes the call fail.
  * Use before the module under test is imported (vi.resetModules, then import).
  */
 import { vi } from 'vitest';
@@ -13,7 +13,8 @@ export const TICKET_IDS: Record<string, string> = {};
 cfg.tickets.forEach(function (t) { TICKET_IDS[t.name] = t.id; });
 
 export const EVENT = 'abu-dhabi-2026';
-export const TELR_URL = 'https://secure.telr.com/gateway/process.html?o=TESTREF';
+// the site's payment page of the order the mock books
+export const PAY_PAGE = 'http://site.test/pay/CJTEST';
 
 export function shopMock(answers: Record<string, Answer | null> = {}) {
   const calls: { name: string; data: URLSearchParams }[] = [];
@@ -26,7 +27,7 @@ export function shopMock(answers: Record<string, Answer | null> = {}) {
     },
     soldOut: function () { return { left_tickets: 100 }; },
     buyTickets: function () { return { status: '1', paymentUrl: 'http://site.test/shop/pay/CJTEST', orderId: 'CJTEST' }; },
-    payUrl: function () { return TELR_URL; },
+    preparePayment: function () { return { state: 'ready', ref: 'CJTEST', amount: 8000, currency: 'USD', items: [], init: { store_id: 1, currency: 'USD', test_mode: 1 } }; },
     ...answers
   };
   const fn = function (name: string, toData: (...a: never[]) => Record<string, string>) {
@@ -44,7 +45,7 @@ export function shopMock(answers: Record<string, Answer | null> = {}) {
       ticketTypes: fn('ticketTypes', function (eventId: string) { return { eventId }; }),
       soldOut: fn('soldOut', function (ticketId: string) { return { ticketId }; }),
       buyTickets: fn('buyTickets', function (form: Record<string, string>) { return form; }),
-      payUrl: fn('payUrl', function (ref: string) { return { ref }; })
+      preparePayment: fn('preparePayment', function (ref: string) { return { ref }; })
     };
   });
 
