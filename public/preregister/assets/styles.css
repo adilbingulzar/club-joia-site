@@ -74,6 +74,9 @@ a { color: inherit; }
 /* BENEFITS (compare table) */
 .benefits { padding: clamp(88px, 12vw, 160px) var(--gutter) clamp(72px, 10vw, 128px); max-width: 1320px; margin: 0 auto; scroll-margin-top: 40px; }
 .tech { font: 800 clamp(30px, 4vw, 46px)/1.1 "Orbitron", var(--sans); letter-spacing: .01em; margin: 0; }
+/* the hero's links land on the heading, just under the fixed nav (not the section's empty top) */
+#benefits-title { scroll-margin-top: 112px; }
+@media (max-width: 700px) { #benefits-title { scroll-margin-top: 96px; } }
 .benefits-lead { color: var(--pearl-muted); font-size: clamp(15px, 1.4vw, 18px); margin: 22px 0 0; max-width: 720px; }
 .table-wrap { margin-top: clamp(40px, 5vw, 64px); }
 .compare { width: 100%; border-collapse: collapse; font: 400 clamp(13px, 1.25vw, 17px)/1.35 var(--sans); }
