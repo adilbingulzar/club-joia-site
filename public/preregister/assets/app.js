@@ -132,4 +132,29 @@
     form.hidden = false;
   }
   document.querySelectorAll('a[href="#register"]').forEach((a) => a.addEventListener("click", showForm));
+
+  // The packages table folds to its first rows (styles.css .folded); "Show all benefits" opens it
+  // like an accordion and closes it again.
+  const table = document.getElementById("compare");
+  const more = document.querySelector(".compare-more");
+  if (table && more) {
+    const rows = table.querySelectorAll("tbody tr").length;
+    const toggle = more.querySelector(".more-toggle");
+    const label = more.querySelector(".more-label");
+    const set = (open) => {
+      table.classList.toggle("folded", !open);
+      toggle.setAttribute("aria-expanded", String(open));
+      label.textContent = open ? "Show fewer" : "Show all " + rows + " benefits";
+    };
+    if (rows > 6) {
+      set(false);
+      more.hidden = false;
+      toggle.addEventListener("click", () => {
+        const open = toggle.getAttribute("aria-expanded") !== "true";
+        set(open);
+        // closing: keep the button in view instead of leaving the reader far below
+        if (!open) toggle.scrollIntoView({ block: "center", behavior: "smooth" });
+      });
+    }
+  }
 })();

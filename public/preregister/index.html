@@ -37,7 +37,7 @@
       <h1>An exclusive trackside <em>mega yacht</em> experience</h1>
       <p class="hero-lead">Three hundred members. One weekend on the water at Yas Marina Circuit. Membership by invitation only.</p>
       <div class="hero-cta">
-        <a href="#register" class="btn">Pre-register now</a>
+        <a href="#benefits" class="btn">Pre-register now</a>
       </div>
     </div>
     <a href="#benefits" class="scroll-cue" aria-label="Scroll down"><span></span></a>
@@ -47,7 +47,7 @@
   <section class="benefits" id="benefits" aria-labelledby="benefits-title">
     <h2 class="tech" id="benefits-title">Available access packages</h2>
     <p class="benefits-lead">Every level includes the essentials. Each step up adds more comfort, service and privacy.</p>
-    <div class="table-wrap">
+    <div class="table-wrap" id="compare">
       <table class="compare">
         <thead>
           <tr>
@@ -78,6 +78,10 @@
           <tr><th scope="row">Dedicated waiter</th><td><span class="dash" aria-hidden="true">–</span><span class="sr">Not included</span></td><td><span class="dash" aria-hidden="true">–</span><span class="sr">Not included</span></td><td><svg class="tick" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg><span class="sr">Included</span></td></tr>
         </tbody>
       </table>
+    </div>
+    <!-- shown by app.js, which folds the table to its first rows; without script the whole table shows -->
+    <div class="compare-more" hidden>
+      <button type="button" class="more-toggle" aria-expanded="false" aria-controls="compare"><span class="more-label">Show all benefits</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
     </div>
     <div class="benefits-cta">
       <a href="#register" class="btn">Pre-register now</a>
