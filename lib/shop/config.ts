@@ -13,7 +13,7 @@ function env(name: string): string {
 export const shopConfig = {
   // the event on sale, by its slug in the database (events.slug)
   get event() { return env('SHOP_EVENT'); },
-  get currency() { return (env('SHOP_CURRENCY') || 'USD').toUpperCase(); },
+  get currency() { return (env('SHOP_CURRENCY') || 'AED').toUpperCase(); },
   // this site: the buyer comes back to its /thank-you and /payment/<status> pages
   get siteUrl() { return url(process.env.SHOP_SITE_URL); },
   // where the buyer's bank check returns (IFZA's registered return domain) and the emails reach

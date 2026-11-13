@@ -116,7 +116,7 @@ tiers.forEach(function (t) {
 });
 
 export const CJ_CONFIG = {
-  currency: 'USD',
+  currency: 'AED',
   maxPerTicket: 10, // max quantity of one ticket per order
   packages: packages,
   tiers: tiers,

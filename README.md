@@ -89,7 +89,7 @@ offers "Start again" (a new order, stock checked again).
 | `app/Api/Eventsnew/[name]`, `app/shop/...`, `app/api/pay`, `app/api/pay/status` | the HTTP routes |
 | `app/pay/[ref]`, `components/CardPayment.tsx` | the payment page with Telr's card fields |
 
-The currency (`SHOP_CURRENCY`, USD) must be one IFZA's store accepts, else IFZA refuses the
+The currency (`SHOP_CURRENCY`, AED) must be one IFZA's store accepts, else IFZA refuses the
 payment and `/summary` says "Payment isn't available for your order right now". The return domain
 (`SHOP_PUBLIC_URL`, else `SHOP_SITE_URL`, https) must be registered with IFZA.
 
@@ -141,7 +141,7 @@ MAINTENANCE_KEY=long-random-text            # optional: developers open the site
 
 # the database: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME (above)
 SHOP_EVENT=abu-dhabi-2026                   # the event on sale, by its slug (members app: Admin > Events)
-SHOP_CURRENCY=USD
+SHOP_CURRENCY=AED
 SHOP_SITE_URL=https://clubjoia300.com       # this site: the payment page, the bank check's return (IFZA's registered return domain), email links
 SHOP_SUPPORT_PHONE="+971 ..."               # the phone in the emails, else the event's support phone
 SHOP_ALT_PAYMENT_URL=                       # optional: "Alternative payment option", default <SHOP_SITE_URL>/tickets

@@ -3,7 +3,7 @@
  *
  *   id       "<tier>/<package>", as the site's tickets (lib/config.ts)
  *   name     the site's ticket name exactly ("Ruby Red, 3 days"): the site finds the ticket by it
- *   price    in SHOP_CURRENCY (USD), per ticket
+ *   price    in SHOP_CURRENCY (AED), per ticket
  *   tier     slug of the membership tier the buyer gets (membership_tiers.slug)
  *   codes    codes of the event's ticket types the buyer gets for each ticket bought
  *            (ticket_types.code, members app: Admin > Tickets)
