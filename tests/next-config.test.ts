@@ -13,26 +13,18 @@ afterEach(function () {
   vi.unstubAllEnvs();
 });
 
-describe('ticket email paths', function () {
-  it('come from the server holding the tickets', async function () {
-    vi.stubEnv('ALFRED_UAE_URL', 'https://uae.example.com/');
-    const rewrites = (await nextConfig.rewrites!()) as { source: string; destination: string }[];
-    expect(rewrites).toContainEqual({ source: '/booking_events/pdf/:path', destination: 'https://uae.example.com/booking_events/pdf/:path' });
-    expect(rewrites).toContainEqual({ source: '/assets/:path*', destination: 'https://uae.example.com/assets/:path*' });
-  });
-
-  it('are not served without that server', async function () {
-    vi.stubEnv('ALFRED_UAE_URL', '');
+describe('maintenance paths', function () {
+  it('send nothing to the old Alfred ticket server', async function () {
     expect(await nextConfig.rewrites!()).toEqual([{ source: '/privacy', destination: '/preregister/privacy.html' }]);
   });
 
-  it('stay open during maintenance', function () {
-    expect(showsMaintenance('/booking_events/pdf/abc')).toBe(false);
-    expect(showsMaintenance('/Ajaxdorian/getQrcodeImage/T-1')).toBe(false);
-    expect(showsMaintenance('/uploads/qrcodes/T-1.png')).toBe(false);
-    expect(showsMaintenance('/assets/images/events/a.png')).toBe(false);
-    expect(showsMaintenance('/ticketing/download')).toBe(false);
-    expect(showsMaintenance('/downloadticketpdf/G-1')).toBe(false);
+  it('close the old Alfred ticket paths too', function () {
+    expect(showsMaintenance('/booking_events/pdf/abc')).toBe(true);
+    expect(showsMaintenance('/downloadticketpdf/G-1')).toBe(true);
+  });
+
+  it('keep the site\'s fonts open (the dashboard uses them)', function () {
+    expect(showsMaintenance('/assets/fonts/Outfit.woff2')).toBe(false);
   });
 
   it('leave the site itself behind the maintenance page', function () {
@@ -231,13 +223,6 @@ describe('security headers', function () {
     }
   });
 
-  it('leave the CSP off the ticket server\'s files (PDF viewer)', async function () {
-    for (const path of ['/booking_events/pdf/abc', '/downloadticketpdf/G-1', '/ticketing/download', '/uploads/qrcodes/T-1.png']) {
-      const keys = await rulesFor(path);
-      expect(keys).not.toContain('Content-Security-Policy');
-      expect(keys).toContain('Strict-Transport-Security');
-    }
-  });
 
   it('allow nothing from other domains', function () {
     expect(CONTENT_SECURITY_POLICY).not.toMatch(/https?:|\*/);

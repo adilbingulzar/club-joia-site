@@ -135,9 +135,8 @@ database: answer no (it would delete everything). On the live server `migrate de
 All settings are in one file, `.env` (or the server's environment), in blocks with comments:
 
 ```bash
-ALFRED_UAE_URL=https://tiqs.it              # optional: old Alfred ticket emails' links (PDF, QR) keep working; read at build time
 IP_ALLOWLIST="127.0.0.1, ::1"               # optional: only these addresses/ranges reach the site at all (pages, APIs, files, the bank check's return); others get 403. Empty = off. Uses the last X-Forwarded-For entry, so the site must listen on 127.0.0.1 behind nginx (lib/ip-allowlist.ts)
-MAINTENANCE_MODE=true                       # optional: visitors get the pre-registration page (below); /admin, the ticket shop's routes and ticket email links stay open; restart to apply
+MAINTENANCE_MODE=true                       # optional: visitors get the pre-registration page (below); /admin and the ticket shop's routes stay open; restart to apply
 MAINTENANCE_KEY=long-random-text            # optional: developers open the site once with ?dev=<this key> during maintenance
 
 # the database: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME (above)

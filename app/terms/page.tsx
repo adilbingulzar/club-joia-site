@@ -30,7 +30,7 @@ export default function TermsPage() {
 
         <section>
           <h2>3. Prices and payment</h2>
-          <p>Prices are per guest and shown in the currency of the event. Booking and payment fees, if any, are shown before you pay. Payments are processed by our payment providers (noon, MultiSafepay or Pay.nl); we do not store your card details.</p>
+          <p>Prices are per guest and shown in the currency of the event. Booking and payment fees, if any, are shown before you pay. Card payments are processed securely by IFZA through the Telr payment gateway. You enter your card details directly in Telr&rsquo;s secure card form, so we never see or store them.</p>
         </section>
 
         <section>

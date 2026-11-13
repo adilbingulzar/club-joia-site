@@ -11,8 +11,6 @@ import type { NextConfig } from 'next';
  * that frame: only that page may be framed, and only by this site. 'unsafe-inline' for scripts and styles:
  * Next.js puts its page data in inline scripts, and pages are static (a nonce would make every page
  * render per request). Development also needs 'unsafe-eval' (React's error overlay).
- * The ticket files the site passes through from the ticket server (PDFs, QR codes, see rewrites)
- * get no CSP: a PDF viewer must not be held to it.
  */
 const dev = process.env.NODE_ENV === 'development';
 const TELR = 'https://secure.telr.com';
@@ -45,9 +43,6 @@ export const SECURITY_HEADERS = [
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()' }
 ];
 
-// the ticket server's files (see rewrites): every path except these gets the CSP
-const TICKET_FILES = 'booking_events/pdf/|Ajaxdorian/getQrcodeImage/|uploads/qrcodes/|ticketing/download|downloadticketpdf/';
-
 const nextConfig: NextConfig = {
   turbopack: { root: __dirname },
   // no "X-Powered-By: Next.js"
@@ -55,7 +50,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: '/:path*', headers: SECURITY_HEADERS },
-      { source: '/((?!' + TICKET_FILES + ').*)', headers: [{ key: 'Content-Security-Policy', value: CONTENT_SECURITY_POLICY }] },
+      { source: '/:path*', headers: [{ key: 'Content-Security-Policy', value: CONTENT_SECURITY_POLICY }] },
       // later rules win for the same header
       { source: '/pay/:ref', headers: [{ key: 'Content-Security-Policy', value: PAYMENT_PAGE_POLICY }] },
       { source: '/shop/return/:ref', headers: [
@@ -77,13 +72,7 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     // the pre-registration page's privacy notice (public/preregister/privacy.html) at /privacy
-    const own = [{ source: '/privacy', destination: '/preregister/privacy.html' }];
-    // Ticket emails link to this site: their PDF, QR code and images come from the server holding the tickets.
-    const server = (process.env.ALFRED_UAE_URL || '').replace(/\/+$/, '');
-    if (!server) return own;
-    return own.concat(['/booking_events/pdf/:path', '/Ajaxdorian/getQrcodeImage/:path', '/uploads/qrcodes/:path', '/assets/:path*', '/ticketing/download', '/downloadticketpdf/:path'].map(function (source) {
-      return { source, destination: server + source };
-    }));
+    return [{ source: '/privacy', destination: '/preregister/privacy.html' }];
   }
 };
 
