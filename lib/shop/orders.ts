@@ -25,8 +25,8 @@ export type Buyer = {
 
 // Unpaid orders (not paid, made in the last hour) one email or one address may have, so nobody can
 // fill the orders or send "One more step to join us" to someone else's email over and over.
-const UNPAID_PER_EMAIL = 5;
-const UNPAID_PER_IP = 20;
+const UNPAID_PER_EMAIL = 50;
+const UNPAID_PER_IP = 50;
 
 function text(v: unknown, max = 100): string {
   return typeof v === 'string' ? v.trim().slice(0, max) : '';

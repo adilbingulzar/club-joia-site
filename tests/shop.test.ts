@@ -92,6 +92,8 @@ let routes: {
 let closeDb: () => Promise<void>;
 // the test's own connection (the owner's), queries written as the shop's (lib/shop/db.ts)
 let raw: mysql.Pool;
+// when the run began: the rate-limit counters it starts are removed after it (so a second run isn't limited)
+let runStart = '';
 let toMysql: (text: string, params?: unknown[]) => [string, unknown[]];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const pool = { query: async function (text: string, params: unknown[] = []): Promise<{ rows: any[] }> {
@@ -203,6 +205,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     // the seeded admin gets an authenticator for the test
     adminMfa = (await raw.query('SELECT id, mfa_enabled, mfa_secret_encrypted, mfa_enrolled_at, mfa_last_used_step FROM users WHERE email = ?', ['admin@joia.test']) as any)[0][0];
     await raw.query('UPDATE users SET mfa_enabled = 1, mfa_secret_encrypted = ?, mfa_last_used_step = NULL WHERE email = ?', [encryptTotpSecret(MFA_SECRET, MFA_KEY), 'admin@joia.test']);
+    runStart = (await one("SELECT DATE_FORMAT(UTC_TIMESTAMP(3), '%Y-%m-%d %H:%i:%s.%f') AS t")).t;
   });
 
   afterAll(async function () {
@@ -212,6 +215,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
       // the test's wrong passwords and codes, so a second run within 15 minutes isn't locked out
       await pool.query('DELETE FROM shop.sign_in_failures WHERE bucket IN ($1)', [['email:admin@joia.test', 'ip:10.9.9.8', 'ip:10.9.9.9']]).catch(function () {});
     }
+    if (runStart) await pool.query('DELETE FROM shop.rate_limits WHERE window_start >= $1', [runStart]).catch(function (e) { process.stderr.write('rate limits: ' + e + '\n'); });
     await cleanup().catch(function (e) { process.stderr.write('cleanup: ' + e + '\n'); });
     await closeDb();
     await raw.end();
@@ -422,7 +426,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect((await card(ref2b)).body).toEqual({ error: 'This payment has expired. Please start again: you have not been charged.', retry: false });
   });
 
-  it('limits unpaid orders per email (5) and per address (20) in an hour', async function () {
+  it('limits unpaid orders per email (50) and per address (50) in an hour', async function () {
     const stamp = Date.now();
     const mail = function (n: number | string) { return 'shoptest+limit' + n + '-' + stamp + '@example.com'; };
     const place = async function (to: string, ip: string) {
@@ -430,19 +434,19 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     };
     const refused = { status: '0', message: 'You have several unfinished orders. Please complete one of them or try again in an hour.' };
 
-    for (let i = 0; i < 5; i++) expect((await place(mail('a'), '10.8.8.8')).status).toBe('1');
+    for (let i = 0; i < 50; i++) expect((await place(mail('a'), '10.8.8.8')).status).toBe('1');
     expect(await place(mail('a'), '10.8.8.9')).toEqual(refused);
     expect(await place(mail('A'), '10.8.8.9')).toEqual(refused); // the same email in capitals
-    expect((await place(mail('b'), '10.8.8.8')).status).toBe('1');
+    expect((await place(mail('b'), '10.8.8.10')).status).toBe('1');
 
-    for (let i = 0; i < 20; i++) expect((await place(mail(i), '10.7.7.7')).status).toBe('1');
+    for (let i = 0; i < 50; i++) expect((await place(mail(i), '10.7.7.7')).status).toBe('1');
     expect(await place(mail('z'), '10.7.7.7')).toEqual(refused);
     expect((await place(mail('z'), '10.7.7.8')).status).toBe('1');
 
     // an hour later the email can order again
     await pool.query('UPDATE shop.orders SET created_at = created_at - INTERVAL 2 HOUR WHERE email = $1', [mail('a')]);
     expect((await place(mail('a'), '10.8.8.8')).status).toBe('1');
-  });
+  }, 30000);
 
   it('serves the sales dashboard\'s API to signed-in admins only', async function () {
     const call = async function (method: 'GET' | 'POST', path: string, init: { key?: string; user?: string; body?: unknown } = {}) {

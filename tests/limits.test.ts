@@ -3,7 +3,7 @@
  *
  *   dashboard sign-in + MFA  (lib/shop/admin.ts)   5 failures per email, 20 per address, 15 minutes
  *   pre-registration form    (lib/preregister.ts)  5 per hour per connection
- *   checkout                 (lib/shop/orders.ts)  5 unpaid orders per email, 20 per address, 1 hour
+ *   checkout                 (lib/shop/orders.ts)  50 unpaid orders per email, 50 per address, 1 hour
  *
  *   payment                  /api/pay, /api/pay/status, /shop/return, /shop/retry, IFZA's call cap
  *
@@ -333,32 +333,32 @@ describe.skipIf(!DB_URL)('rate limits on a database', function () {
     });
   });
 
-  // ═══ Checkout: 5 unpaid orders per email, 20 per address, 1 hour ═══
+  // ═══ Checkout: 50 unpaid orders per email, 50 per address, 1 hour ═══
   describe('checkout', function () {
-    it('5 unpaid orders per email: the 6th is refused, capitals count as the same email', async function () {
+    it('50 unpaid orders per email: the 51st is refused, capitals count as the same email', async function () {
       const who = mail('co');
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 50; i++) {
         const r = await checkout(who, freshIp());
         expect(r.status, JSON.stringify(r.body)).toBe(200);
         expect(r.body.url).toMatch(/^http:\/\/site\.test\/pay\//);
       }
       expect(await checkout(who, freshIp())).toEqual({ status: 400, body: { error: UNFINISHED } });
       expect((await checkout(who.toUpperCase(), freshIp())).body.error).toBe(UNFINISHED);
-      expect((await q('SELECT COUNT(*) AS n FROM shop_orders WHERE email = ?', [who]))[0].n).toBe(5);
+      expect((await q('SELECT COUNT(*) AS n FROM shop_orders WHERE email = ?', [who]))[0].n).toBe(50);
       // another email is not affected
       expect((await checkout(mail('co-other'), freshIp())).status).toBe(200);
     });
 
-    it('20 unpaid orders from one address: the 21st is refused, other addresses still work', async function () {
+    it('50 unpaid orders from one address: the 51st is refused, other addresses still work', async function () {
       const ip = freshIp();
-      for (let i = 0; i < 20; i++) expect((await checkout(mail('coip' + i), ip)).status).toBe(200);
+      for (let i = 0; i < 50; i++) expect((await checkout(mail('coip' + i), ip)).status).toBe(200);
       expect((await checkout(mail('coip-new'), ip)).body.error).toBe(UNFINISHED);
       expect((await checkout(mail('coip-new'), freshIp())).status).toBe(200);
     });
 
     it('paid orders don\'t count', async function () {
       const who = mail('copaid');
-      for (let i = 0; i < 5; i++) await checkout(who, freshIp());
+      for (let i = 0; i < 50; i++) await checkout(who, freshIp());
       expect((await checkout(who, freshIp())).body.error).toBe(UNFINISHED);
       await q("UPDATE shop_orders SET status = 'paid' WHERE email = ?", [who]);
       expect((await checkout(who, freshIp())).status).toBe(200);
@@ -366,23 +366,23 @@ describe.skipIf(!DB_URL)('rate limits on a database', function () {
 
     it('the limit ends after an hour', async function () {
       const who = mail('cohour');
-      for (let i = 0; i < 5; i++) await checkout(who, freshIp());
+      for (let i = 0; i < 50; i++) await checkout(who, freshIp());
       expect((await checkout(who, freshIp())).body.error).toBe(UNFINISHED);
       await q('UPDATE shop_orders SET created_at = created_at - INTERVAL 61 MINUTE WHERE email = ?', [who]);
       expect((await checkout(who, freshIp())).status).toBe(200);
     });
 
-    it('10 orders for one email at the same moment: no more than 5 are made', async function () {
+    it('60 orders for one email at the same moment: no more than 50 are made', async function () {
       const who = mail('corace');
-      const answers = await Promise.all(Array.from({ length: 10 }, function () { return checkout(who, freshIp()); }));
-      expect(answers.filter(function (a) { return a.status === 200; }).length).toBe(5);
-      expect((await q('SELECT COUNT(*) AS n FROM shop_orders WHERE email = ?', [who]))[0].n).toBe(5);
+      const answers = await Promise.all(Array.from({ length: 60 }, function () { return checkout(who, freshIp()); }));
+      expect(answers.filter(function (a) { return a.status === 200; }).length).toBe(50);
+      expect((await q('SELECT COUNT(*) AS n FROM shop_orders WHERE email = ?', [who]))[0].n).toBe(50);
     });
 
     // the address is the LAST X-Forwarded-For entry (nginx's)
     it('a blocked address can\'t get past by sending its own X-Forwarded-For', async function () {
       const ip = freshIp();
-      for (let i = 0; i < 20; i++) await checkout(mail('cospoof' + i), ip);
+      for (let i = 0; i < 50; i++) await checkout(mail('cospoof' + i), ip);
       expect((await checkout(mail('cospoof-new'), freshIp() + ', ' + ip)).body.error).toBe(UNFINISHED);
     });
   });

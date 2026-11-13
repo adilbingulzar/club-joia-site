@@ -106,7 +106,7 @@ Security:
   only; only `/shop/return/<ref>` may be framed, by this site only (`next.config.ts`).
 - **The visitor's address** for every limit is the LAST `X-Forwarded-For` entry, the one nginx
   adds (`clientIp`, `lib/ip-allowlist.ts`), never the first one, which the visitor can write.
-- **Unpaid orders** (in the last hour): 5 per email and 20 per buyer address, so nobody fills the
+- **Unpaid orders** (in the last hour): 50 per email and 50 per buyer address, so nobody fills the
   orders or sends "One more step to join us" to someone else's email over and over.
 - **Dashboard sign-in:** 5 wrong passwords or codes per email and 20 per address in 15 minutes,
   counted in `shop_sign_in_failures` (survives restarts, shared by several servers). Each try is
