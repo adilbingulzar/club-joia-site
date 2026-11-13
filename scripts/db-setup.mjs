@@ -1,6 +1,7 @@
 /*
  * Makes the site's own tables in the database of .env (DB_*), if missing: shop_orders,
- * shop_sign_in_failures, pre_registrations, shop_registration_attempts, shop_locks.
+ * shop_sign_in_failures, pre_registrations, shop_registration_attempts, shop_rate_limits,
+ * shop_payment_logs, shop_locks. Never drops or empties a table.
  * Run once after a deploy:  npm run db:setup
  * (The site also makes them on its first database use.) Needs Node 22.18 or newer: it runs
  * lib/shop/db.ts as it is.
