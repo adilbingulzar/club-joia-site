@@ -1,17 +1,12 @@
 /*
- * The key between this site's server and its ticket shop APIs (Api/Eventsnew, shop/admin):
+ * The key between this site's server and its ticket shop API (Api/Eventsnew):
  * SHOP_ADMIN_KEY (16+ characters), sent as a bearer token. Browsers and other callers don't have
- * it, so they can't place orders around the checkout's checks or read the dashboard's data.
+ * it, so they can't place orders around the checkout's checks.
  */
 import crypto from 'node:crypto';
 
 export function shopKey(): string {
   return String(process.env.SHOP_ADMIN_KEY || '').trim();
-}
-
-// the header lib/admin/backend.ts sends
-export function shopKeyHeader(): Record<string, string> {
-  return { Authorization: 'Bearer ' + shopKey() };
 }
 
 // true when the request carries the key (compared in constant time)

@@ -23,8 +23,10 @@ describe('maintenance paths', function () {
     expect(showsMaintenance('/downloadticketpdf/G-1')).toBe(true);
   });
 
-  it('keep the site\'s fonts open (the dashboard uses them)', function () {
-    expect(showsMaintenance('/assets/fonts/Outfit.woff2')).toBe(false);
+  it('close the site\'s fonts and the old dashboard paths (the dashboard is in the members app now)', function () {
+    expect(showsMaintenance('/assets/fonts/Outfit.woff2')).toBe(true);
+    expect(showsMaintenance('/admin')).toBe(true);
+    expect(showsMaintenance('/admin/login')).toBe(true);
   });
 
   it('leave the site itself behind the maintenance page', function () {
@@ -35,10 +37,7 @@ describe('maintenance paths', function () {
     expect(showsMaintenance('/administration')).toBe(true);
   });
 
-  it('leave the sales dashboard and its logo open, it has its own sign-in', function () {
-    expect(showsMaintenance('/admin')).toBe(false);
-    expect(showsMaintenance('/admin/login')).toBe(false);
-    expect(showsMaintenance('/admin/orders/CJ123')).toBe(false);
+  it('leave the logo open (the browser tab\'s icon)', function () {
     expect(showsMaintenance('/assets/img/logo.png')).toBe(false);
   });
 
@@ -134,8 +133,7 @@ describe('IP allowlist', function () {
   it('refuses every path, files and APIs included, to other addresses', async function () {
     vi.stubEnv('IP_ALLOWLIST', '203.0.113.7, 10.0.0.0/8, 2001:db8::/32');
     vi.stubEnv('MAINTENANCE_MODE', 'false');
-    vi.stubEnv('SALES_DASHBOARD', 'on');
-    for (const path of ['/', '/tickets', '/admin', '/admin/login', '/api/checkout', '/api/preregister', '/Api/Eventsnew/buyTickets', '/shop/return/CJ1', '/_next/static/chunks/a.js', '/assets/fonts/Outfit.woff2', '/privacy']) {
+    for (const path of ['/', '/tickets', '/api/checkout', '/api/preregister', '/Api/Eventsnew/buyTickets', '/shop/return/CJ1', '/_next/static/chunks/a.js', '/assets/fonts/Outfit.woff2', '/privacy']) {
       const r = visit(path, '198.51.100.1');
       expect(r.status, path).toBe(403);
       expect(await r.text()).toBe('Access denied.');
@@ -178,31 +176,6 @@ describe('IP allowlist', function () {
     expect(allowed('1.2.3.4', r)).toBe(false);
     expect(allowed('not-an-ip', r)).toBe(false);
     expect(allowed('', r)).toBe(false);
-  });
-});
-
-describe('sales dashboard switch', function () {
-  const visit = function (path: string) {
-    return proxy(new NextRequest('https://club.example.com' + path, { headers: { 'x-forwarded-for': '127.0.0.1' } }));
-  };
-
-  it('is closed without SALES_DASHBOARD=on: pages, sign-in, exports and its API answer 404', async function () {
-    vi.stubEnv('SALES_DASHBOARD', '');
-    vi.stubEnv('MAINTENANCE_MODE', 'false');
-    for (const path of ['/admin', '/admin/', '/admin/login', '/admin/export', '/admin/registrations/export', '/admin/orders/CJ1', '/shop/admin/login', '/shop/admin/stats']) {
-      const r = visit(path);
-      expect(r.status, path).toBe(404);
-      expect(await r.text()).toBe('Not found.');
-    }
-    // the rest of the site and the ticket shop stay open
-    for (const path of ['/', '/tickets', '/administration', '/shop/pay/CJ1', '/shop/return/CJ1', '/assets/img/logo.png']) expect(visit(path).status, path).toBe(200);
-  });
-
-  it('opens with SALES_DASHBOARD=on', function () {
-    vi.stubEnv('SALES_DASHBOARD', 'on');
-    vi.stubEnv('MAINTENANCE_MODE', 'false');
-    expect(visit('/admin/login').status).toBe(200);
-    expect(visit('/shop/admin/stats').status).toBe(200);
   });
 });
 

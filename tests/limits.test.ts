@@ -1,7 +1,6 @@
 /*
  * The site's rate limits, tried every way on a real database (never the live one):
  *
- *   dashboard sign-in + MFA  (lib/shop/admin.ts)   5 failures per email, 20 per address, 15 minutes
  *   pre-registration form    (lib/preregister.ts)  5 per hour per connection
  *   checkout                 (lib/shop/orders.ts)  50 unpaid orders per email, 50 per address, 1 hour
  *
@@ -16,16 +15,11 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import mysql from 'mysql2/promise';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { encryptTotpSecret, generateTotpSecret, totpCode, totpStep } from '@/lib/shop/totp';
 
 const DB_URL = process.env.SHOP_TEST_DATABASE_URL || '';
 const SITE = 'http://site.test';
 const EVENT = process.env.SHOP_TEST_EVENT || 'abu-dhabi-2026';
 const ADMIN_KEY = 'limits-test-admin-key-0123456789';
-const MFA_KEY = 'limits-test-mfa-key-limits-test-mfa-key-01';
-const MFA_SECRET = generateTotpSecret();
-const ADMIN = 'admin@joia.test';
-const ADMIN_PASSWORD = 'JoiaDev!2026-staff';
 const IFZA_KEY = 'ifza_ik_live_LIMITSTEST_000';
 const STAMP = Date.now();
 // addresses of this run only (10.88.x.y), so runs don't count against each other
@@ -35,7 +29,6 @@ function mail(tag: string): string { return 'shoptest+lim-' + tag + '-' + STAMP 
 
 type Ctx<P> = { params: Promise<P> };
 let routes: {
-  admin: { POST: (r: Request, c: Ctx<{ path: string[] }>) => Promise<Response> };
   prereg: { POST: (r: Request) => Promise<Response> };
   checkout: { POST: (r: Request) => Promise<Response> };
   pay: { POST: (r: Request) => Promise<Response> };
@@ -45,7 +38,6 @@ let routes: {
 };
 let raw: mysql.Pool;
 let closeDb: () => Promise<void>;
-let adminSaved: Record<string, unknown> | null = null;
 let stub: http.Server;
 const usedIps: string[] = [];
 // the limit keys this run used (shop_rate_limits stores them hashed), removed afterwards
@@ -80,22 +72,6 @@ async function q(sql: string, params: unknown[] = []) {
   const [r] = await raw.query(sql, params);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return r as any;
-}
-
-// ─── dashboard sign-in (the API the dashboard's sign-in form calls) ───
-async function signIn(body: Record<string, unknown>) {
-  const r = await routes.admin.POST(new Request(SITE + '/shop/admin/login', {
-    method: 'POST', headers: { Authorization: 'Bearer ' + ADMIN_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-  }), { params: Promise.resolve({ path: ['login'] }) });
-  return { status: r.status, body: await r.json() };
-}
-// the admin's current code, forgetting the last one used (each code works once)
-async function code(): Promise<string> {
-  await q('UPDATE users SET mfa_last_used_step = NULL WHERE email = ?', [ADMIN]);
-  return totpCode(MFA_SECRET, totpStep());
-}
-async function forgetFailures(...buckets: string[]) {
-  await q('DELETE FROM shop_sign_in_failures WHERE bucket IN (?)', [buckets]);
 }
 
 // ─── pre-registration form ───
@@ -154,14 +130,13 @@ describe.skipIf(!DB_URL)('rate limits on a database', function () {
   beforeAll(async function () {
     Object.assign(process.env, {
       ...dbEnv(DB_URL), SHOP_EVENT: EVENT, SHOP_CURRENCY: 'USD', SHOP_SITE_URL: SITE, SHOP_PUBLIC_URL: '', SHOP_ADMIN_KEY: ADMIN_KEY,
-      MFA_ENCRYPTION_KEY: MFA_KEY, EMAIL_DRIVER: 'console', PREREG_NOTIFY_EMAIL: 'team@example.com', PREREG_SEND_CONFIRMATION: '0',
+      EMAIL_DRIVER: 'console', PREREG_NOTIFY_EMAIL: 'team@example.com', PREREG_SEND_CONFIRMATION: '0',
       IFZA_API_KEY: IFZA_KEY, IFZA_STORE: 'Elixium-Events-Test', IFZA_URL: await startStub(), IFZA_MAX_CALLS: '100000'
     });
     vi.spyOn(console, 'info').mockImplementation(function () {});
     vi.spyOn(console, 'error').mockImplementation(function () {});
     raw = mysql.createPool({ uri: DB_URL, connectionLimit: 3 });
     routes = {
-      admin: await import('@/app/shop/admin/[...path]/route'),
       prereg: await import('@/app/api/preregister/route'),
       checkout: await import('@/app/api/checkout/route'),
       pay: await import('@/app/api/pay/route'),
@@ -170,18 +145,9 @@ describe.skipIf(!DB_URL)('rate limits on a database', function () {
       retry: await import('@/app/shop/retry/[ref]/route')
     };
     closeDb = (await import('@/lib/shop/db')).closeDb;
-    // the seeded admin gets an authenticator for the test; its own settings come back afterwards
-    adminSaved = (await q('SELECT id, mfa_enabled, mfa_secret_encrypted, mfa_enrolled_at, mfa_last_used_step FROM users WHERE email = ?', [ADMIN]))[0] || null;
-    await q('UPDATE users SET mfa_enabled = 1, mfa_secret_encrypted = ?, mfa_last_used_step = NULL WHERE email = ?', [encryptTotpSecret(MFA_SECRET, MFA_KEY), ADMIN]);
-    await forgetFailures('email:' + ADMIN);
   });
 
   afterAll(async function () {
-    if (adminSaved) {
-      await q('UPDATE users SET mfa_enabled = ?, mfa_secret_encrypted = ?, mfa_enrolled_at = ?, mfa_last_used_step = ? WHERE id = ?',
-        [adminSaved.mfa_enabled, adminSaved.mfa_secret_encrypted, adminSaved.mfa_enrolled_at, adminSaved.mfa_last_used_step, adminSaved.id]);
-    }
-    await q("DELETE FROM shop_sign_in_failures WHERE bucket LIKE ? OR bucket = ? OR bucket LIKE 'ip:10.88.%'", ['email:shoptest+lim-%', 'email:' + ADMIN]);
     // audit_logs is append-only (the database refuses deletes): the test's entries (addresses 10.88.x.y) stay
     await q("DELETE FROM shop_payment_logs WHERE reference IN (SELECT ref FROM shop_orders WHERE email LIKE 'shoptest+lim-%@example.com') OR payment_id IN (SELECT pay_id FROM shop_orders WHERE email LIKE 'shoptest+lim-%@example.com' AND pay_id IS NOT NULL)");
     await q("DELETE FROM shop_orders WHERE email LIKE 'shoptest+lim-%@example.com'");
@@ -197,87 +163,6 @@ describe.skipIf(!DB_URL)('rate limits on a database', function () {
     await raw.end();
     await new Promise(function (r) { stub.close(r); });
     vi.restoreAllMocks();
-  });
-
-  // ═══ Dashboard sign-in + MFA: 5 failures per email, 20 per address, 15 minutes ═══
-  describe('dashboard sign-in', function () {
-    it('5 wrong passwords for an email: the 6th try is refused, from any address', async function () {
-      const who = mail('pw');
-      for (let i = 0; i < 5; i++) expect((await signIn({ email: who, password: 'wrong', ip: freshIp() })).status).toBe(401);
-      expect(await signIn({ email: who, password: 'wrong', ip: freshIp() })).toEqual({ status: 429, body: { error: 'Too many attempts. Please wait a few minutes and try again.' } });
-      // capitals are the same email
-      expect((await signIn({ email: who.toUpperCase(), password: 'wrong', ip: freshIp() })).status).toBe(429);
-      // another email is not affected
-      expect((await signIn({ email: mail('pw-other'), password: 'wrong', ip: freshIp() })).status).toBe(401);
-    });
-
-    it('a locked email refuses even the right password and code', async function () {
-      const ip = freshIp();
-      for (let i = 0; i < 5; i++) await signIn({ email: ADMIN, password: 'wrong', ip });
-      expect((await signIn({ email: ADMIN, password: ADMIN_PASSWORD, code: await code(), ip: freshIp() })).status).toBe(429);
-      await forgetFailures('email:' + ADMIN);
-      expect((await signIn({ email: ADMIN, password: ADMIN_PASSWORD, code: await code(), ip: freshIp() })).status).toBe(200);
-    });
-
-    it('wrong MFA codes count as failures, and are written to the audit log', async function () {
-      const ip = freshIp();
-      for (let i = 0; i < 5; i++) {
-        expect((await signIn({ email: ADMIN, password: ADMIN_PASSWORD, code: '000000', ip })).status).toBe(401);
-      }
-      expect((await signIn({ email: ADMIN, password: ADMIN_PASSWORD, code: await code(), ip })).status).toBe(429);
-      expect((await q("SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'shop.dashboard_mfa_failed' AND ip_address = ?", [ip]))[0].n).toBe(5);
-      await forgetFailures('email:' + ADMIN, 'ip:' + ip);
-    });
-
-    it('a code used once counts as a failure the second time', async function () {
-      const ip = freshIp();
-      const c = await code();
-      expect((await signIn({ email: ADMIN, password: ADMIN_PASSWORD, code: c, ip })).status).toBe(200);
-      expect((await signIn({ email: ADMIN, password: ADMIN_PASSWORD, code: c, ip })).status).toBe(401);
-      expect((await q('SELECT COUNT(*) AS n FROM shop_sign_in_failures WHERE bucket = ?', ['ip:' + ip]))[0].n).toBe(1);
-      await forgetFailures('email:' + ADMIN, 'ip:' + ip);
-    });
-
-    it('a missing code is not counted (the form asks for it), a right sign-in neither', async function () {
-      const ip = freshIp();
-      expect((await signIn({ email: ADMIN, password: ADMIN_PASSWORD, ip })).status).toBe(401);
-      expect((await signIn({ email: ADMIN, password: ADMIN_PASSWORD, code: await code(), ip })).status).toBe(200);
-      expect((await q('SELECT COUNT(*) AS n FROM shop_sign_in_failures WHERE bucket = ?', ['ip:' + ip]))[0].n).toBe(0);
-    });
-
-    it('20 failures from one address: every email is refused from there, other addresses still work', async function () {
-      const ip = freshIp();
-      for (let i = 0; i < 20; i++) expect((await signIn({ email: mail('ip' + i), password: 'wrong', ip })).status).toBe(401);
-      expect((await signIn({ email: mail('ip-new'), password: 'wrong', ip })).status).toBe(429);
-      expect((await signIn({ email: ADMIN, password: ADMIN_PASSWORD, code: await code(), ip })).status).toBe(429);
-      expect((await signIn({ email: ADMIN, password: ADMIN_PASSWORD, code: await code(), ip: freshIp() })).status).toBe(200);
-    });
-
-    it('the lock ends after 15 minutes', async function () {
-      const who = mail('window');
-      for (let i = 0; i < 5; i++) await signIn({ email: who, password: 'wrong', ip: freshIp() });
-      expect((await signIn({ email: who, password: 'wrong', ip: freshIp() })).status).toBe(429);
-      await q('UPDATE shop_sign_in_failures SET at = at - INTERVAL 16 MINUTE WHERE bucket = ?', ['email:' + who]);
-      expect((await signIn({ email: who, password: 'wrong', ip: freshIp() })).status).toBe(401);
-    });
-
-    it('an unknown email and a wrong password get the same answer (no account guessing)', async function () {
-      const a = await signIn({ email: mail('nobody'), password: 'wrong', ip: freshIp() });
-      const b = await signIn({ email: ADMIN, password: 'wrong', ip: freshIp() });
-      expect(a).toEqual(b);
-      await forgetFailures('email:' + ADMIN);
-    });
-
-    // each try is written first and counted after, so tries at the same moment see each other
-    it('30 wrong passwords at the same moment: no more than 5 are tried', async function () {
-      const who = mail('race');
-      const answers = await Promise.all(Array.from({ length: 30 }, function () { return signIn({ email: who, password: 'wrong', ip: freshIp() }); }));
-      const tried = answers.filter(function (a) { return a.status === 401; }).length;
-      expect(tried).toBeLessThanOrEqual(5);
-      expect(answers.filter(function (a) { return a.status === 429; }).length).toBeGreaterThanOrEqual(25);
-      // refused tries leave nothing behind: exactly the tried ones are counted
-      expect((await q('SELECT COUNT(*) AS n FROM shop_sign_in_failures WHERE bucket = ?', ['email:' + who]))[0].n).toBe(tried);
-    });
   });
 
   // ═══ Pre-registration: 5 per hour per connection ═══

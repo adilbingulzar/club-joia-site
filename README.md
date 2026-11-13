@@ -84,7 +84,6 @@ offers "Start again" (a new order, stock checked again).
 | `lib/shop/fulfil.ts` | member, membership and tickets after payment |
 | `lib/shop/ifza.ts` | IFZA's payment API (create, checkout, status) |
 | `lib/shop/email.ts`, `templates.ts` | the two emails |
-| `lib/shop/admin.ts` | the sales dashboard's API |
 | `lib/shop/db.ts` | the database (MySQL, `mysql2`); makes the shop's tables on first use |
 | `app/Api/Eventsnew/[name]`, `app/shop/...`, `app/api/pay`, `app/api/pay/status` | the HTTP routes |
 | `app/pay/[ref]`, `components/CardPayment.tsx` | the payment page with Telr's card fields |
@@ -95,9 +94,8 @@ payment and `/summary` says "Payment isn't available for your order right now". 
 
 Security:
 
-- **The site calls the shop directly**, not over HTTP. Its HTTP routes `Api/Eventsnew/...` and
-  `shop/admin/...` are no longer used by the site and answer 401 without `SHOP_ADMIN_KEY` as a
-  bearer token (`lib/shop/key.ts`), so every order passes the checkout's checks (age, terms, ...).
+- **The site calls the shop directly**, not over HTTP. Its HTTP route `Api/Eventsnew/...` is no
+  longer used by the site and answers 401 without `SHOP_ADMIN_KEY` as a bearer token (`lib/shop/key.ts`), so every order passes the checkout's checks (age, terms, ...).
   `shop/pay`, `shop/return`, `shop/retry` and `shop/email` stay open: buyers, the bank check and the emails use them.
 - **Payment status comes from IFZA only** (`PAID`), never from a request; reference, payment id,
   amount and currency must match the order.
@@ -108,9 +106,6 @@ Security:
   adds (`clientIp`, `lib/ip-allowlist.ts`), never the first one, which the visitor can write.
 - **Unpaid orders** (in the last hour): 50 per email and 50 per buyer address, so nobody fills the
   orders or sends "One more step to join us" to someone else's email over and over.
-- **Dashboard sign-in:** 5 wrong passwords or codes per email and 20 per address in 15 minutes,
-  counted in `shop_sign_in_failures` (survives restarts, shared by several servers). Each try is
-  written before it's counted, so tries sent at the same moment can't get past the limit.
 - **Payment:** card tries (`/api/pay`) 10 per order in 30 minutes and 30 per address in 15;
   status checks (`/api/pay/status`, `/shop/return`) 20 per order and 60 per address in 15 minutes
   (past them the pending page, the sweep still settles the order); the retry link reuses its open
@@ -127,8 +122,9 @@ Security:
 
 The database: one, the members app's (`joia_dev` locally). Its own tables (`users`, `members`,
 `memberships`, `tickets`, ...) and the shop's, made by the site on first use: `shop_orders`,
-`shop_sign_in_failures`, `pre_registrations` (the pre-registration form), `shop_rate_limits`,
-`shop_locks` (`shop_registration_attempts` is no longer used). Times are stored in UTC, as the members app stores them.
+`pre_registrations` (the pre-registration form), `shop_rate_limits`, `shop_payment_logs` (every
+IFZA call), `shop_locks` (`shop_registration_attempts` and `shop_sign_in_failures` are no longer
+used and can be dropped). Times are stored in UTC, as the members app stores them.
 Prisma's `migrate dev` in the members app sees the `shop_` tables as drift and offers to reset the
 database: answer no (it would delete everything). On the live server `migrate deploy` doesn't check this.
 
@@ -136,7 +132,7 @@ All settings are in one file, `.env` (or the server's environment), in blocks wi
 
 ```bash
 IP_ALLOWLIST="127.0.0.1, ::1"               # optional: only these addresses/ranges reach the site at all (pages, APIs, files, the bank check's return); others get 403. Empty = off. Uses the last X-Forwarded-For entry, so the site must listen on 127.0.0.1 behind nginx (lib/ip-allowlist.ts)
-MAINTENANCE_MODE=true                       # optional: visitors get the pre-registration page (below); /admin and the ticket shop's routes stay open; restart to apply
+MAINTENANCE_MODE=true                       # optional: visitors get the pre-registration page (below); the ticket shop's routes stay open; restart to apply
 MAINTENANCE_KEY=long-random-text            # optional: developers open the site once with ?dev=<this key> during maintenance
 
 # the database: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME (above)
@@ -145,10 +141,7 @@ SHOP_CURRENCY=AED
 SHOP_SITE_URL=https://clubjoia300.com       # this site: the payment page, the bank check's return (IFZA's registered return domain), email links
 SHOP_SUPPORT_PHONE="+971 ..."               # the phone in the emails, else the event's support phone
 SHOP_ALT_PAYMENT_URL=                       # optional: "Alternative payment option", default <SHOP_SITE_URL>/tickets
-SHOP_TIMEZONE=Asia/Dubai                    # optional: the sales dashboard's days
-SHOP_ADMIN_KEY=long-random-text             # 16+ characters: the key of the ticket and dashboard APIs, and the dashboard cookie's
-SALES_DASHBOARD=on                          # the sales dashboard (/admin, /shop/admin) is closed (404) unless this is "on"
-MFA_ENCRYPTION_KEY=...                      # the members app's MFA_ENCRYPTION_KEY, same value: dashboard sign-in checks the admins' authenticator codes
+SHOP_ADMIN_KEY=long-random-text             # 16+ characters: the key of the ticket API (Api/Eventsnew)
 IFZA_API_KEY=ifza_ik_live_...               # issued by IFZA (starts in test mode); server only, never in the browser
 IFZA_STORE=Elixium-Events-Test              # IFZA, IFZA-Test, Elixium-Events or Elixium-Events-Test: a -Test store while the key is in test mode
 IFZA_MAX_CALLS=90                           # optional: the site's cap on IFZA create + checkout calls per 15 minutes (IFZA's own limit is 100)
@@ -179,25 +172,22 @@ still open the full site with `?dev=<MAINTENANCE_KEY>`.
   time of 3 seconds, only from this site's own page, 5 submissions per hour per connection (an
   anonymised code, counted in `shop_rate_limits`; the IP address itself is never stored).
 - Emails: the team (`PREREG_NOTIFY_EMAIL`) about each one, the guest a short confirmation.
-- `/admin/registrations` — the list, search and CSV download, behind the dashboard's sign-in (was
-  the package's PHP admin with its own password).
+- The list, search and CSV download are in the members app: Admin > Sales > Pre-registrations
+  (was the package's PHP admin with its own password).
 
 Before launch, `public/preregister/privacy.html` needs its last highlighted placeholder filled in:
 the legal company name and registered address. (Privacy contact: the Data Protection Officer,
 DPO@clubjoia300.com; retention: 180 days from the date of delivery.)
 
-## Sales dashboard (/admin)
+## Sales dashboard
 
-Ticket orders with figures, charts, filters, an order list, each order's detail and a CSV export, read only. Staff sign in with their account of the members app (admins only, Argon2 password in its `users` table) **and the 6-digit code of their authenticator app** (two-factor sign-in): the shop's admin API checks both (`/shop/admin/login`), this site keeps a signed cookie for 12 hours. Every page asks the API again, so a staff member disabled in the members app, or whose two-factor sign-in was reset there, is signed out here. Sign-ins and wrong codes go to its audit log (`shop.dashboard_sign_in`, `shop.dashboard_mfa_failed`).
-
-Two-factor sign-in: admins set up the authenticator in the members app's staff portal (it asks at their first sign-in there); this site has no set-up of its own. `lib/shop/totp.ts` is a copy of the members app's `src/lib/security/totp.ts`, and `MFA_ENCRYPTION_KEY` must be the same in both apps. Each code works once, in either app (`users.mfa_last_used_step`, added by the members app's migration `20261111120000_mfa_last_used_step`).
-
-- `app/admin/` — the dashboard (`page.tsx`), sign-in (`login/`, `actions.ts`), an order (`orders/[ref]/`), the CSV (`export/route.ts`).
-- `lib/admin/` — session cookie, API calls, filters (days in Dubai time), formats, CSV. `components/admin/` — charts and shared pieces.
-- `/admin` stays open during maintenance, it has its own sign-in.
+The ticket sales (figures, charts, filters, orders, each order, CSV) and the pre-registrations are
+in the members app: **Admin > Sales** (`/admin/sales`, admins only, with its own sign-in and
+two-factor code). It reads this site's `shop_orders` and `pre_registrations` in the same database.
+This site has no dashboard of its own any more.
 
 `SHOP_ADMIN_KEY` (any long random text, 16+ characters) is the bearer token between the site's
-server and its APIs, and signs the dashboard's cookie.
+server and its ticket API.
 
 ## Going live
 
@@ -206,7 +196,7 @@ server and its APIs, and signs the dashboard's cookie.
 2. `.env` as above (`IFZA_STORE` a `-Test` store first; `.env` isn't in git, put it on the server yourself), then
    `npm ci && npm run build`, `npm run db:setup` (makes the site's tables now: it prints which
    database it used, or why it failed) and restart. The database user needs CREATE for that.
-3. IFZA: the return domain `https://clubjoia300.com` registered, the store accepting USD.
+3. IFZA: the return domain `https://clubjoia300.com` registered, the store accepting AED.
 4. Buy once with IFZA's test cards (paid, declined, cancelled) and check the emails, the member and
-   tickets in the members app, and `/admin`. Then ask IFZA to switch the key to production, set the
+   tickets in the members app, and its Admin > Sales. Then ask IFZA to switch the key to production, set the
    live store (`IFZA_STORE=Elixium-Events` or `IFZA`), restart, and switch `MAINTENANCE_MODE` off.

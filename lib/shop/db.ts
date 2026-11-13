@@ -18,7 +18,7 @@ type Shared = { pool: Pool | null; key?: string; ready: Promise<void> | null; ma
 // one pool per server, also across the dev server's reloads
 const shared: Shared = ((globalThis as unknown as { __cjShopMysql?: Shared }).__cjShopMysql ||= { pool: null, ready: null });
 
-const SHOP_TABLES = ['orders', 'sign_in_failures', 'registration_attempts', 'rate_limits', 'locks', 'payment_logs'];
+const SHOP_TABLES = ['orders', 'registration_attempts', 'rate_limits', 'locks', 'payment_logs'];
 
 type Settings = { host: string; port: number; user: string; password: string; database: string };
 
@@ -146,14 +146,6 @@ async function migrate(): Promise<void> {
       KEY orders_ip (ip, created_at),
       KEY orders_retry_of (retry_of),
       KEY orders_sweep (status, pay_checkout_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-    // failed sign-ins of the sales dashboard, per email and address (lib/shop/admin.ts)
-    `CREATE TABLE IF NOT EXISTS shop.sign_in_failures (
-      id      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      bucket  VARCHAR(255) NOT NULL,
-      at      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-      KEY sign_in_failures_bucket (bucket, at),
-      KEY sign_in_failures_at (at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     // the pre-registration page (lib/preregister.ts): one row per submission, the same email may come again
     `CREATE TABLE IF NOT EXISTS pre_registrations (

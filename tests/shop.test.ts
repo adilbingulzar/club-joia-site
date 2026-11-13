@@ -14,7 +14,6 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import mysql from 'mysql2/promise';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { encryptTotpSecret, generateTotpSecret, totpCode, totpStep } from '@/lib/shop/totp';
 
 const DB_URL = process.env.SHOP_TEST_DATABASE_URL || '';
 const CHECK_URL = process.env.SHOP_TEST_ADMIN_DATABASE_URL || DB_URL;
@@ -22,10 +21,6 @@ const SITE = 'http://site.test';
 const EVENT = process.env.SHOP_TEST_EVENT || 'abu-dhabi-2026';
 const ADMIN_KEY = 'shop-test-admin-key-0123456789';
 const email = 'shoptest+' + Date.now() + '@example.com';
-// the seeded admin's authenticator during the test (its own settings are put back afterwards)
-const MFA_KEY = 'shop-test-mfa-key-shop-test-mfa-key-0001';
-const MFA_SECRET = generateTotpSecret();
-let adminMfa: { id: string; mfa_enabled: number; mfa_secret_encrypted: string | null; mfa_enrolled_at: string | null; mfa_last_used_step: number | null } | null = null;
 
 // ─── Stand-in IFZA: create, checkout and status; answers[reference] sets what a status says ───
 const IFZA_KEY = 'ifza_ik_live_TESTKEY_0123456789';
@@ -86,7 +81,6 @@ let routes: {
   card: { POST: (r: Request) => Promise<Response> };
   status: { POST: (r: Request) => Promise<Response> };
   retry: { GET: (r: Request, c: Ctx<{ ref: string }>) => Promise<Response> };
-  admin: { GET: (r: Request, c: Ctx<{ path: string[] }>) => Promise<Response>; POST: (r: Request, c: Ctx<{ path: string[] }>) => Promise<Response> };
   prereg: { POST: (r: Request) => Promise<Response> };
 };
 let closeDb: () => Promise<void>;
@@ -167,15 +161,6 @@ function dbEnv(address: string) {
   };
 }
 
-// the admin's current code; each code works once, so the test forgets the last one used first
-function freshCode(): string;
-function freshCode(reset: true): Promise<string>;
-function freshCode(reset?: boolean): string | Promise<string> {
-  const code = totpCode(MFA_SECRET, totpStep());
-  if (!reset) return code;
-  return raw.query('UPDATE users SET mfa_last_used_step = NULL WHERE email = ?', ['admin@joia.test']).then(function () { return code; });
-}
-
 const one = function (sql: string, params: unknown[] = []) { return pool.query(sql, params).then(function (r) { return r.rows[0]; }); };
 
 describe.skipIf(!DB_URL)('ticket shop on a database', function () {
@@ -183,8 +168,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     Object.assign(process.env, {
       ...dbEnv(DB_URL), SHOP_EVENT: EVENT, SHOP_CURRENCY: 'USD', SHOP_SITE_URL: SITE, SHOP_PUBLIC_URL: '',
       SHOP_ADMIN_KEY: ADMIN_KEY, IFZA_API_KEY: IFZA_KEY, IFZA_STORE: 'Elixium-Events-Test', IFZA_URL: await startStub(), IFZA_MAX_CALLS: '100000',
-      EMAIL_DRIVER: 'console', SHOP_SUPPORT_PHONE: '+971 50 000 0000', PREREG_NOTIFY_EMAIL: 'team@example.com', PREREG_SEND_CONFIRMATION: '1',
-      MFA_ENCRYPTION_KEY: MFA_KEY
+      EMAIL_DRIVER: 'console', SHOP_SUPPORT_PHONE: '+971 50 000 0000', PREREG_NOTIFY_EMAIL: 'team@example.com', PREREG_SEND_CONFIRMATION: '1'
     });
     vi.spyOn(console, 'info').mockImplementation(function (...a: unknown[]) { mails.push(a.join(' ')); });
     vi.spyOn(console, 'error').mockImplementation(function () {});
@@ -197,24 +181,14 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
       card: await import('@/app/api/pay/route'),
       status: await import('@/app/api/pay/status/route'),
       retry: await import('@/app/shop/retry/[ref]/route'),
-      admin: await import('@/app/shop/admin/[...path]/route'),
       prereg: await import('@/app/api/preregister/route')
     };
     closeDb = (await import('@/lib/shop/db')).closeDb;
 
-    // the seeded admin gets an authenticator for the test
-    adminMfa = (await raw.query('SELECT id, mfa_enabled, mfa_secret_encrypted, mfa_enrolled_at, mfa_last_used_step FROM users WHERE email = ?', ['admin@joia.test']) as any)[0][0];
-    await raw.query('UPDATE users SET mfa_enabled = 1, mfa_secret_encrypted = ?, mfa_last_used_step = NULL WHERE email = ?', [encryptTotpSecret(MFA_SECRET, MFA_KEY), 'admin@joia.test']);
     runStart = (await one("SELECT DATE_FORMAT(UTC_TIMESTAMP(3), '%Y-%m-%d %H:%i:%s.%f') AS t")).t;
   });
 
   afterAll(async function () {
-    if (adminMfa) {
-      await raw.query('UPDATE users SET mfa_enabled = ?, mfa_secret_encrypted = ?, mfa_enrolled_at = ?, mfa_last_used_step = ? WHERE id = ?',
-        [adminMfa.mfa_enabled, adminMfa.mfa_secret_encrypted, adminMfa.mfa_enrolled_at, adminMfa.mfa_last_used_step, adminMfa.id]).catch(function (e) { process.stderr.write('mfa restore: ' + e + '\n'); });
-      // the test's wrong passwords and codes, so a second run within 15 minutes isn't locked out
-      await pool.query('DELETE FROM shop.sign_in_failures WHERE bucket IN ($1)', [['email:admin@joia.test', 'ip:10.9.9.8', 'ip:10.9.9.9']]).catch(function () {});
-    }
     if (runStart) await pool.query('DELETE FROM shop.rate_limits WHERE window_start >= $1', [runStart]).catch(function (e) { process.stderr.write('rate limits: ' + e + '\n'); });
     await cleanup().catch(function (e) { process.stderr.write('cleanup: ' + e + '\n'); });
     await closeDb();
@@ -460,70 +434,6 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect((await place(mail('a'), '10.8.8.8')).status).toBe('1');
   }, 30000);
 
-  it('serves the sales dashboard\'s API to signed-in admins only', async function () {
-    const call = async function (method: 'GET' | 'POST', path: string, init: { key?: string; user?: string; body?: unknown } = {}) {
-      const headers: Record<string, string> = { Authorization: 'Bearer ' + (init.key === undefined ? ADMIN_KEY : init.key) };
-      if (init.user) headers['X-Admin-User'] = init.user;
-      if (!init.key && init.key !== undefined) delete headers.Authorization;
-      if (init.body) headers['Content-Type'] = 'application/json';
-      const req = new Request(SITE + '/shop/admin/' + path, { method, headers, body: init.body ? JSON.stringify(init.body) : undefined });
-      const r = await routes.admin[method](req, { params: Promise.resolve({ path: path.split('?')[0].split('/') }) });
-      return { status: r.status, body: await r.json() };
-    };
-    expect((await call('POST', 'login', { key: 'wrong-key-wrong-key', body: { email: 'admin@joia.test', password: 'x' } })).status).toBe(401);
-    expect((await call('POST', 'login', { body: { email: 'admin@joia.test', password: 'nope', ip: '10.9.9.9' } })).status).toBe(401);
-    expect((await call('POST', 'login', { body: { email: 'alex.carter@joia.test', password: 'JoiaDev!2026-member', ip: '10.9.9.9' } })).status).toBe(401);
-    // 5 wrong passwords per email in 15 minutes, counted in the database
-    const nobody = 'shoptest+nobody' + Date.now() + '@example.com';
-    for (let i = 0; i < 5; i++) expect((await call('POST', 'login', { body: { email: nobody, password: 'nope', ip: '10.6.6.6' } })).status).toBe(401);
-    expect((await call('POST', 'login', { body: { email: nobody, password: 'nope', ip: '10.6.6.5' } })).status).toBe(429);
-    expect((await one('SELECT COUNT(*) AS n FROM shop.sign_in_failures WHERE bucket = $1', ['email:' + nobody])).n).toBe(5);
-
-    // two-factor: the password alone isn't enough, a wrong or used code neither
-    const pw = { email: 'Admin@joia.test', password: 'JoiaDev!2026-staff', ip: '10.9.9.8' };
-    const noCode = await call('POST', 'login', { body: pw });
-    expect(noCode.status).toBe(401);
-    expect(noCode.body.error).toMatch(/6-digit code/);
-    const wrong = String((Number(totpCode(MFA_SECRET, totpStep())) + 1) % 1000000).padStart(6, '0');
-    expect((await call('POST', 'login', { body: { ...pw, code: wrong } })).status).toBe(401);
-    expect((await call('POST', 'login', { body: { ...pw, code: freshCode() } })).status).toBe(200);
-    expect((await call('POST', 'login', { body: { ...pw, code: totpCode(MFA_SECRET, totpStep()) } })).status).toBe(401);
-    // without an authenticator set up in the members app: refused
-    await raw.query('UPDATE users SET mfa_enabled = 0 WHERE email = ?', ['admin@joia.test']);
-    const notSetUp = await call('POST', 'login', { body: { ...pw, code: freshCode() } });
-    expect(notSetUp.status).toBe(403);
-    expect(notSetUp.body.error).toMatch(/staff portal/);
-    await raw.query('UPDATE users SET mfa_enabled = 1, mfa_last_used_step = NULL WHERE email = ?', ['admin@joia.test']);
-
-    const signIn = await call('POST', 'login', { body: { email: 'Admin@joia.test', password: 'JoiaDev!2026-staff', ip: '10.9.9.9', code: freshCode() } });
-    expect(signIn.status).toBe(200);
-    expect(signIn.body.user.role).toBe('SUPER_ADMIN');
-    const id = signIn.body.user.id;
-    expect((await call('GET', 'stats')).status).toBe(401);
-
-    const q = 'q=' + encodeURIComponent(email);
-    const st = (await call('GET', 'stats?' + q, { user: id })).body;
-    expect(st.totals).toMatchObject({ orders: 5, paid: 3, revenue: 34750, tickets: 5, buyers: 1 });
-    const byStatus = Object.fromEntries(st.byStatus.map(function (s: { status: string; orders: number }) { return [s.status, s.orders]; }));
-    expect(byStatus).toMatchObject({ paid: 3, declined: 1, cancelled: 1, pending: 0 });
-    const byType = Object.fromEntries(st.byTicketType.map(function (t: { code: string; tickets: number }) { return [t.code, t.tickets]; }));
-    expect(byType).toMatchObject({ FRI: 5, SAT: 4, SUN: 3, AFTER: 3, PARK: 1 });
-    const byTier = Object.fromEntries(st.byTier.map(function (t: { tier: string; revenue: number }) { return [t.tier, t.revenue]; }));
-    expect(byTier).toMatchObject({ 'ruby-red': 20000, 'pearly-white': 5000, 'ultra-black': 9750 });
-    expect(st.byCountry).toEqual([{ country: 'Pakistan', orders: 3, revenue: 34750 }]);
-
-    const tierOnly = (await call('GET', 'stats?' + q + '&tier=ruby-red', { user: id })).body;
-    expect(tierOnly.totals.paid).toBe(2);
-    const list = (await call('GET', 'orders?' + q + '&status=paid', { user: id })).body;
-    expect(list.orders.map(function (o: { ref: string }) { return o.ref; })).toEqual([ref3b, ref2, ref1]);
-    const detail = (await call('GET', 'orders/' + ref1, { user: id })).body.order;
-    expect(detail.member.number).toMatch(/^CJ300-/);
-    expect(detail.ticketList).toHaveLength(10);
-    expect(detail.payment).toMatchObject({ status: 'PAID' });
-    expect(detail.payment.id).toMatch(/^pay_stub/);
-    expect((await call('GET', 'orders/NOPE', { user: id })).status).toBe(404);
-  });
-
   it('saves pre-registrations (the maintenance page\'s form), once per email, with spam checks', async function () {
     const stamp = Date.now();
     const ip = '10.5.' + (stamp % 250) + '.' + ((stamp >> 8) % 250);
@@ -569,14 +479,10 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     for (let i = 0; i < 3; i++) expect((await send(Object.assign({}, good, { email: 'shoptest+reg' + stamp + '-' + i + '@example.com' }))).status).toBe(200);
     expect((await send(Object.assign({}, good, { email: 'shoptest+reg' + stamp + '-x@example.com' }))).status).toBe(429);
 
-    // the dashboard's list
-    const signIn = await routes.admin.POST(new Request(SITE + '/shop/admin/login', { method: 'POST', headers: { Authorization: 'Bearer ' + ADMIN_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'admin@joia.test', password: 'JoiaDev!2026-staff', ip: '10.9.9.9', code: await freshCode(true) }) }), { params: Promise.resolve({ path: ['login'] }) });
-    const id = (await signIn.json()).user.id;
-    const list = await routes.admin.GET(new Request(SITE + '/shop/admin/registrations?q=' + encodeURIComponent('reg' + stamp), { headers: { Authorization: 'Bearer ' + ADMIN_KEY, 'X-Admin-User': id } }), { params: Promise.resolve({ path: ['registrations'] }) });
-    const data = await list.json();
-    expect(data.registrations).toHaveLength(5);
-    expect(data.registrations.find(function (r: { email: string }) { return r.email === who; })).toMatchObject({ firstName: 'Reg', tier: 'Ruby Red', marketing: true, message: '=1+1 hello' });
-    expect(data.total).toBeGreaterThanOrEqual(5);
+    // what the members app's Sales > Pre-registrations page reads
+    const saved = (await pool.query("SELECT email, first_name, tier_interest, marketing_opt_in, message FROM pre_registrations WHERE email LIKE $1 ORDER BY id", ['shoptest+reg' + stamp + '%'])).rows;
+    expect(saved).toHaveLength(5);
+    expect(saved[1]).toMatchObject({ email: who, first_name: 'Reg', tier_interest: 'Ruby Red', marketing_opt_in: 1, message: '=1+1 hello' });
   });
 });
 
@@ -612,5 +518,4 @@ async function cleanup() {
   await pool.query("DELETE FROM shop.payment_logs WHERE reference IN (SELECT ref FROM shop.orders WHERE email LIKE 'shoptest+%@example.com') OR payment_id IN (SELECT pay_id FROM shop.orders WHERE email LIKE 'shoptest+%@example.com' AND pay_id IS NOT NULL)");
   await pool.query("DELETE FROM shop.orders WHERE email LIKE 'shoptest+%@example.com'");
   await pool.query("DELETE FROM pre_registrations WHERE email LIKE 'shoptest+%@example.com'");
-  await pool.query("DELETE FROM shop.sign_in_failures WHERE bucket LIKE 'email:shoptest+%' OR bucket IN ('ip:10.6.6.6', 'ip:10.6.6.5', 'ip:10.9.9.9', 'email:admin@joia.test', 'email:alex.carter@joia.test')");
 }

@@ -3,9 +3,6 @@
  *
  * IP allowlist: with IP_ALLOWLIST set, only those addresses get anything, see lib/ip-allowlist.ts.
  *
- * Sales dashboard: /admin and its API (/shop/admin) answer 404 unless SALES_DASHBOARD=on.
- * Closed by default, so a server without the setting never shows it.
- *
  * Maintenance: while MAINTENANCE_MODE=true visitors get the pre-registration page at / (its form:
  * app/api/preregister); every other page sends them there, other APIs answer 503.
  * Remove it or set it to false and restart the site to open it again.
@@ -23,23 +20,16 @@ const COOKIE = 'cj300-dev';
 const PAGE = '/preregister/index.html';
 
 // The paths maintenance mode closes, as a whole-path pattern:
-// static build files and the site's fonts can't reveal anything on their own;
-// the sales dashboard (/admin, with the logo and fonts it shows) has its own sign-in;
+// static build files and the logo (the browser tab's icon) can't reveal anything on their own;
 // the ticket shop's APIs (Api/Eventsnew, shop/) are called by this site's own server, the bank check's return and the emails;
 // the pre-registration page (preregister/), its privacy notice (privacy) and form (api/preregister) are what visitors get;
 // everything else, API included, goes to the pre-registration page.
-export const MAINTENANCE_PATHS = '/((?!_next/static|_next/image|assets/(?!img/)|assets/img/logo\\.png$|admin(?:/|$)|Api/Eventsnew/|shop/|preregister/|privacy$|api/preregister$).*)';
+export const MAINTENANCE_PATHS = '/((?!_next/static|_next/image|assets/img/logo\\.png$|Api/Eventsnew/|shop/|preregister/|privacy$|api/preregister$).*)';
 const closesForMaintenance = new RegExp('^' + MAINTENANCE_PATHS + '$');
-
-// the sales dashboard: its pages, sign-in, exports and server actions (/admin...) and its API (/shop/admin...)
-const DASHBOARD = /^\/(admin|shop\/admin)(\/|$)/;
 
 export function proxy(request: NextRequest) {
   if (allowlistVerdict(request.headers) === false) {
     return new NextResponse('Access denied.', { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
-  }
-  if (process.env.SALES_DASHBOARD !== 'on' && DASHBOARD.test(request.nextUrl.pathname)) {
-    return new NextResponse('Not found.', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
   }
   if (process.env.MAINTENANCE_MODE !== 'true') return NextResponse.next();
   if (!closesForMaintenance.test(request.nextUrl.pathname)) return NextResponse.next();
