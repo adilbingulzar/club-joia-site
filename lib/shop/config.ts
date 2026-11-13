@@ -41,7 +41,10 @@ export const shopConfig = {
     // IFZA, IFZA-Test, Elixium-Events or Elixium-Events-Test (a -Test store while the key is in test mode)
     get store() { return env('IFZA_STORE'); },
     // only for tests against a stand-in server
-    get url() { return url(process.env.IFZA_URL) || 'https://world.ifza.com'; }
+    get url() { return url(process.env.IFZA_URL) || 'https://world.ifza.com'; },
+    // IFZA allows 100 create + checkout calls per 15 minutes per key: this site stops below that, so
+    // nobody can use them all up (lib/shop/ifza.ts)
+    get maxCallsPer15Min() { return Number(env('IFZA_MAX_CALLS')) || 90; }
   },
 
   email: {

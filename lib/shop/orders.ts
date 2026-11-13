@@ -431,7 +431,10 @@ async function sendNotPaid(orderId: number): Promise<void> {
 
 /*
  * "Complete your payment" in that email (/shop/retry/<ref>): a new order for the same tickets at
- * today's prices (IFZA takes each reference once), then its payment link. Paid already: the thank-you
+ * today's prices (IFZA takes each reference once), then its payment link. The link opened again
+ * while that new order is still open (its half hour) gives the same order, not another one, and an
+ * order gets at most 5 retries an hour: a link opened over and over can't fill the orders, hold
+ * the tickets or use up IFZA's calls. Paid already: the thank-you
  * page; a ticket off sale or sold out: the alternative payment page. null for an unknown order.
  */
 export async function retryUrl(ref: string): Promise<string | null> {
@@ -442,6 +445,16 @@ export async function retryUrl(ref: string): Promise<string | null> {
   )).rows[0];
   if (done) return sitePage('paid', done.ref);
   if (!ifza.configured()) return config.altPaymentUrl;
+  const root = o.retry_of || o.ref;
+  const open = (await db.query(
+    "SELECT ref FROM shop.orders WHERE retry_of = $1 AND status = 'pending' AND pay_checkout_at IS NULL AND created_at > NOW(3) - INTERVAL $2 MINUTE ORDER BY id DESC LIMIT 1",
+    [root, config.holdMinutes]
+  )).rows[0];
+  if (open) return payLink(open.ref);
+  const lastHour = Number((await db.query(
+    'SELECT COUNT(*) AS n FROM shop.orders WHERE retry_of = $1 AND created_at > NOW(3) - INTERVAL 1 HOUR', [root]
+  )).rows[0].n);
+  if (lastHour >= 5) return config.altPaymentUrl;
 
   const items: OrderItemRow[] = [];
   for (const i of o.items as OrderItemRow[]) {

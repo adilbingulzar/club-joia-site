@@ -7,6 +7,7 @@
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { adminLogin } from '@/lib/admin/backend';
+import { clientIp } from '@/lib/ip-allowlist';
 import { SESSION_COOKIE, SESSION_SECONDS, signSession } from '@/lib/admin/session';
 
 export type LoginState = { error?: string; email?: string } | undefined;
@@ -20,7 +21,8 @@ export async function login(_state: LoginState, form: FormData): Promise<LoginSt
   if (!code) return { error: 'Enter the 6-digit code from your authenticator app.', email };
 
   const h = await headers();
-  const ip = (h.get('x-forwarded-for') || '').split(',')[0].trim() || h.get('x-real-ip') || 'unknown';
+  // the address nginx added (the last X-Forwarded-For entry), not one the visitor wrote
+  const ip = clientIp(h) || 'unknown';
   const result = await adminLogin(email, password, code, ip);
   if (!result.user) return { error: result.error, email };
 

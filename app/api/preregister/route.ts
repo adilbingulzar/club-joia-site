@@ -2,6 +2,7 @@
 // lib/preregister.ts has the checks, saving and emails.
 import { preregister } from '@/lib/preregister';
 import { readBody } from '@/lib/shop/http';
+import { clientIp } from '@/lib/ip-allowlist';
 
 function reply(status: number, body: unknown): Response {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -17,7 +18,8 @@ export async function POST(request: Request) {
   }
   const r = await preregister({
     form: await readBody(request),
-    ip: (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || request.headers.get('x-real-ip') || '',
+    // the address nginx added (the last X-Forwarded-For entry), not one the visitor wrote
+    ip: clientIp(request.headers),
     userAgent: request.headers.get('user-agent') || ''
   });
   return reply(r.status, r.body);

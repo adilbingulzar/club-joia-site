@@ -87,7 +87,9 @@ export function allowed(ip: string, ranges: Range[]): boolean {
 
 // the visitor's address, see above. No X-Real-IP fallback: Next.js always sets X-Forwarded-For
 // (from the connection) unless the client sent one, so an empty one is the client's own doing.
-export function clientIp(headers: Headers): string {
+// Also the address the site's rate limits count by (sign-in, pre-registration, checkout, payment):
+// never the first entry, which the visitor writes.
+export function clientIp(headers: { get(name: string): string | null }): string {
   const forwarded = (headers.get('x-forwarded-for') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
   return forwarded[forwarded.length - 1] || '';
 }

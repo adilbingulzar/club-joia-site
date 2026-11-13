@@ -14,6 +14,7 @@
  * IFZA has no notification of its own: the buyer's return and the sweep (orders.ts) ask the status.
  */
 import { shopConfig as config } from './config';
+import { hit } from './limit';
 
 const PATH = '/api/integrations/v1/payments';
 
@@ -28,8 +29,14 @@ export function configured(): boolean {
   return !!(config.ifza.apiKey && config.ifza.store);
 }
 
-// { status, body } of a call; null when IFZA can't be reached
+// { status, body } of a call; null when IFZA can't be reached. Create and checkout share IFZA's
+// limit of 100 per 15 minutes: past this site's own cap (config) they aren't sent, and answer as
+// IFZA's 429 would (busy, try again later).
 async function request(path: string, payload: unknown): Promise<{ status: number; body: Answer } | null> {
+  if (path !== '/status' && !(await hit('ifza:calls', config.ifza.maxCallsPer15Min, 15 * 60))) {
+    console.error('[shop] ifza: this site\'s cap of ' + config.ifza.maxCallsPer15Min + ' calls per 15 minutes is reached');
+    return { status: 429, body: { ok: false, error: 'rate_limited', message: 'site cap' } };
+  }
   try {
     const r = await fetch(config.ifza.url + PATH + path, {
       method: 'POST',
@@ -39,6 +46,11 @@ async function request(path: string, payload: unknown): Promise<{ status: number
       signal: AbortSignal.timeout(30000)
     });
     const text = await r.text();
+    // TEMPORARY, for testing on live: what we sent (card token hidden) and IFZA's raw answer
+    const sent = { ...(payload as Record<string, unknown>) };
+    if (sent.card_token) sent.card_token = '[hidden]';
+    console.log('[shop] ifza ' + (path || '/create') + ' sent: ' + JSON.stringify(sent));
+    console.log('[shop] ifza ' + (path || '/create') + ' answer HTTP ' + r.status + ': ' + text.slice(0, 3000));
     let body: Answer;
     try {
       body = JSON.parse(text);

@@ -32,13 +32,27 @@ function answer(status: number, body: unknown): Answer {
 }
 
 // failed sign-ins (shop.sign_in_failures, so restarts and several servers count together):
-// 5 per email and 20 per address in 15 minutes
-async function tooMany(key: string, max: number): Promise<boolean> {
-  const r = await db.query('SELECT COUNT(*) AS n FROM shop.sign_in_failures WHERE bucket = $1 AND at > NOW(3) - INTERVAL 15 MINUTE', [key]);
-  return Number(r.rows[0].n) >= max;
+// 5 per email and 20 per address in 15 minutes.
+// Each try is written FIRST and counted after (begin, then over): tries at the same moment then see
+// each other, so no more than the limit get through however many arrive at once. A try that
+// doesn't count as a failure (signed in, refused by the limit, code not given yet, set-up missing)
+// takes its rows back (forget); a wrong password or code leaves them.
+async function begin(keys: string[]): Promise<number[]> {
+  const ids: number[] = [];
+  for (const key of keys) {
+    const r = await db.query('INSERT INTO shop.sign_in_failures (bucket) VALUES ($1)', [key]);
+    if (r.insertId) ids.push(r.insertId);
+  }
+  return ids;
 }
-async function failed(keys: string[]): Promise<void> {
-  await db.query('INSERT INTO shop.sign_in_failures (bucket) VALUES ' + keys.map(function (_, i) { return '($' + (i + 1) + ')'; }).join(', '), keys);
+async function over(key: string, max: number): Promise<boolean> {
+  const r = await db.query('SELECT COUNT(*) AS n FROM shop.sign_in_failures WHERE bucket = $1 AND at > NOW(3) - INTERVAL 15 MINUTE', [key]);
+  return Number(r.rows[0].n) > max;
+}
+async function forget(ids: number[]): Promise<void> {
+  if (ids.length) await db.query('DELETE FROM shop.sign_in_failures WHERE id IN ($1)', [ids]);
+}
+async function failed(): Promise<void> {
   // the old ones aren't needed any more
   await db.query('DELETE FROM shop.sign_in_failures WHERE at < NOW(3) - INTERVAL 1 DAY');
 }
@@ -50,7 +64,9 @@ async function login(request: Request): Promise<Answer> {
   const password = String(body.password || '').slice(0, 200);
   const ip = String(body.ip || 'unknown').slice(0, 60);
   if (!email || !password) return answer(400, { error: 'Enter your email and password.' });
-  if (await tooMany('email:' + email, 5) || await tooMany('ip:' + ip, 20)) {
+  const mark = await begin(['email:' + email, 'ip:' + ip]);
+  if (await over('email:' + email, 5) || await over('ip:' + ip, 20)) {
+    await forget(mark);
     return answer(429, { error: 'Too many attempts. Please wait a few minutes and try again.' });
   }
 
@@ -58,25 +74,31 @@ async function login(request: Request): Promise<Answer> {
   // the members app's Argon2id hashes
   const ok = user && user.password_hash && await verify(user.password_hash, password).catch(function () { return false; });
   if (!ok || user.status !== 'ACTIVE' || ROLES.indexOf(user.role) < 0) {
-    await failed(['email:' + email, 'ip:' + ip]);
+    await failed();
     // the same answer for a wrong password, an unknown email or a non-admin account
     return answer(401, { error: 'Email or password is incorrect, or this account has no access to sales.' });
   }
 
   // two-factor sign-in: the authenticator is set up in the members app's staff portal
   if (!config.mfaKey) {
+    await forget(mark);
     console.error('[shop] admin sign-in: MFA_ENCRYPTION_KEY is not set');
     return answer(403, { error: 'Two-factor sign-in is not configured on this server yet. Please contact the site administrator.' });
   }
   if (!Number(user.mfa_enabled) || !user.mfa_secret_encrypted) {
+    await forget(mark);
     return answer(403, { error: 'Set up two-factor sign-in first: sign in once to the CLUB JOIA staff portal, which shows how, then sign in here.' });
   }
   const code = String(body.code || '').replace(/\s/g, '').slice(0, 10);
-  if (!code) return answer(401, { error: 'Enter the 6-digit code from your authenticator app.' });
+  if (!code) {
+    await forget(mark);
+    return answer(401, { error: 'Enter the 6-digit code from your authenticator app.' });
+  }
   let secret = '';
   try {
     secret = decryptTotpSecret(user.mfa_secret_encrypted, config.mfaKey);
   } catch (e) {
+    await forget(mark);
     console.error('[shop] admin sign-in: authenticator secret of ' + user.id + ' does not open with MFA_ENCRYPTION_KEY', e);
     return answer(403, { error: 'Your authenticator can’t be checked. Please ask a super admin to reset two-factor sign-in for your account.' });
   }
@@ -87,13 +109,14 @@ async function login(request: Request): Promise<Answer> {
     [step, user.id]
   )).affectedRows === 1;
   if (!claimed) {
-    await failed(['email:' + email, 'ip:' + ip]);
+    await failed();
     await db.query(
       'INSERT INTO audit_logs (id, actor_user_id, action, entity_type, entity_id, ip_address) VALUES ($1, $2, $3, $4, $5, $6)',
       [cuid(), user.id, 'shop.dashboard_mfa_failed', 'user', user.id, ip === 'unknown' ? null : ip]
     );
     return answer(401, { error: 'The code is not correct. Enter the current 6-digit code from your authenticator app.' });
   }
+  await forget(mark);
   await db.query(
     'INSERT INTO audit_logs (id, actor_user_id, action, entity_type, entity_id, ip_address) VALUES ($1, $2, $3, $4, $5, $6)',
     [cuid(), user.id, 'shop.dashboard_sign_in', 'user', user.id, ip === 'unknown' ? null : ip]

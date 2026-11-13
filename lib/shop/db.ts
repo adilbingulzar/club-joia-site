@@ -14,11 +14,11 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import mysql, { type Pool, type PoolConnection } from 'mysql2/promise';
 
-type Shared = { pool: Pool | null; key?: string; ready: Promise<void> | null; madeBy?: string };
+type Shared = { pool: Pool | null; key?: string; ready: Promise<void> | null; madeBy?: string; side?: Pool | null };
 // one pool per server, also across the dev server's reloads
 const shared: Shared = ((globalThis as unknown as { __cjShopMysql?: Shared }).__cjShopMysql ||= { pool: null, ready: null });
 
-const SHOP_TABLES = ['orders', 'sign_in_failures', 'registration_attempts', 'locks'];
+const SHOP_TABLES = ['orders', 'sign_in_failures', 'registration_attempts', 'rate_limits', 'locks'];
 
 type Settings = { host: string; port: number; user: string; password: string; database: string };
 
@@ -35,33 +35,49 @@ function settings(): Settings {
   return s;
 }
 
+function makePool(s: Settings, connectionLimit: number): Pool {
+  const p = mysql.createPool({
+    ...s,
+    connectionLimit,
+    charset: 'utf8mb4',
+    timezone: 'Z',             // DATETIME <-> Date as UTC
+    dateStrings: ['DATE'],     // a DATE stays 'YYYY-MM-DD'
+    supportBigNumbers: true,
+    enableKeepAlive: true
+  });
+  // NOW() and the columns' CURRENT_TIMESTAMP in UTC, as the members app stores them
+  p.on('connection', function (c) {
+    (c as unknown as { query(sql: string, cb: (e: Error | null) => void): void })
+      .query("SET time_zone = '+00:00'", function (e) { if (e) console.error('[shop] database time zone:', e.message); });
+  });
+  return p;
+}
+
 function pool(): Pool {
   const s = settings();
   const key = JSON.stringify(s);
-  // changed settings (the dev server reloads .env) get a new pool
+  // changed settings (the dev server reloads .env) get new pools
   if (shared.pool && shared.key !== key) {
     shared.pool.end().catch(function () {});
+    if (shared.side) shared.side.end().catch(function () {});
     shared.pool = null;
+    shared.side = null;
     shared.ready = null;
   }
   if (!shared.pool) {
     shared.key = key;
-    shared.pool = mysql.createPool({
-      ...s,
-      connectionLimit: 5,
-      charset: 'utf8mb4',
-      timezone: 'Z',             // DATETIME <-> Date as UTC
-      dateStrings: ['DATE'],     // a DATE stays 'YYYY-MM-DD'
-      supportBigNumbers: true,
-      enableKeepAlive: true
-    });
-    // NOW() and the columns' CURRENT_TIMESTAMP in UTC, as the members app stores them
-    shared.pool.on('connection', function (c) {
-      (c as unknown as { query(sql: string, cb: (e: Error | null) => void): void })
-        .query("SET time_zone = '+00:00'", function (e) { if (e) console.error('[shop] database time zone:', e.message); });
-    });
+    shared.pool = makePool(s, 5);
   }
   return shared.pool;
+}
+
+// A second, small pool for single statements that may run while a transaction holds a connection
+// of the main pool (the rate limits, lib/shop/limit.ts): with every main connection in a
+// transaction waiting on them, sharing one pool would wait forever.
+function sidePool(): Pool {
+  pool();
+  if (!shared.side) shared.side = makePool(settings(), 3);
+  return shared.side;
 }
 
 // $n -> ? (with the parameters in that order), shop.<table> -> `shop_<table>`
@@ -76,7 +92,7 @@ export function toMysql(text: string, params: unknown[] = []): [string, unknown[
 
 // rows of a SELECT; affectedRows of a change
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type Result<R = any> = { rows: R[]; affectedRows: number };
+export type Result<R = any> = { rows: R[]; affectedRows: number; insertId?: number };
 // the pool or a transaction's connection
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Db = { query<R = any>(text: string, params?: unknown[]): Promise<Result<R>> };
@@ -85,7 +101,9 @@ async function run<R>(on: Pool | PoolConnection, text: string, params?: unknown[
   const [sql, values] = toMysql(text, params);
   // query, not execute: arrays expand for IN ($1)
   const [r] = await on.query(sql, values);
-  return Array.isArray(r) ? { rows: r as R[], affectedRows: 0 } : { rows: [], affectedRows: (r as { affectedRows?: number }).affectedRows || 0 };
+  if (Array.isArray(r)) return { rows: r as R[], affectedRows: 0 };
+  const h = r as { affectedRows?: number; insertId?: number };
+  return { rows: [], affectedRows: h.affectedRows || 0, insertId: h.insertId };
 }
 
 async function migrate(): Promise<void> {
@@ -165,6 +183,13 @@ async function migrate(): Promise<void> {
       KEY registration_attempts_hash (ip_hash, at),
       KEY registration_attempts_at (at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    // fixed-window counters (lib/shop/limit.ts): one row per hashed key, counted atomically
+    `CREATE TABLE IF NOT EXISTS shop.rate_limits (
+      bucket        CHAR(64) NOT NULL PRIMARY KEY,
+      count         INT NOT NULL,
+      window_start  DATETIME(3) NOT NULL,
+      KEY rate_limits_window (window_start)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     // rows to lock: "stock" lets one order at a time past the stock check (lib/shop/orders.ts)
     `CREATE TABLE IF NOT EXISTS shop.locks (
       name  VARCHAR(64) NOT NULL PRIMARY KEY
@@ -215,6 +240,14 @@ export const db: Db = {
   }
 };
 
+// single statements on the side pool (see sidePool): never inside a transaction
+export const side: Db = {
+  async query(text, params) {
+    await whenReady();
+    return run(sidePool(), text, params);
+  }
+};
+
 // fn(connection) in one transaction
 export async function transaction<T>(fn: (c: Db) => Promise<T>): Promise<T> {
   await whenReady();
@@ -241,9 +274,12 @@ export function isDuplicate(e: unknown): boolean {
 // for tests: closes the pool
 export async function closeDb(): Promise<void> {
   const p = shared.pool;
+  const q = shared.side;
   shared.pool = null;
+  shared.side = null;
   shared.ready = null;
   if (p) await p.end();
+  if (q) await q.end();
 }
 
 // ─── The members app's id and code formats (its src/lib/crypto and Prisma's cuid()) ───

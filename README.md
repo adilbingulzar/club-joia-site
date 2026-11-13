@@ -104,11 +104,21 @@ Security:
 - **The API key stays on the server** (`IFZA_API_KEY`, sent in `X-Api-Key`), never in the browser.
 - **Content-Security-Policy:** Telr's script and frames (`secure.telr.com`) are allowed on `/pay/<ref>`
   only; only `/shop/return/<ref>` may be framed, by this site only (`next.config.ts`).
-- **Unpaid orders** (in the last hour): 5 per email and 20 per buyer address (`X-Forwarded-For`,
-  as the proxy in front of the site passes it), so nobody fills the orders or sends "One more step
-  to join us" to someone else's email over and over.
-- **Dashboard sign-in:** 5 wrong passwords per email and 20 per address in 15 minutes, counted in
-  `shop_sign_in_failures` (survives restarts, shared by several servers).
+- **The visitor's address** for every limit is the LAST `X-Forwarded-For` entry, the one nginx
+  adds (`clientIp`, `lib/ip-allowlist.ts`), never the first one, which the visitor can write.
+- **Unpaid orders** (in the last hour): 5 per email and 20 per buyer address, so nobody fills the
+  orders or sends "One more step to join us" to someone else's email over and over.
+- **Dashboard sign-in:** 5 wrong passwords or codes per email and 20 per address in 15 minutes,
+  counted in `shop_sign_in_failures` (survives restarts, shared by several servers). Each try is
+  written before it's counted, so tries sent at the same moment can't get past the limit.
+- **Payment:** card tries (`/api/pay`) 10 per order in 30 minutes and 30 per address in 15;
+  status checks (`/api/pay/status`, `/shop/return`) 20 per order and 60 per address in 15 minutes
+  (past them the pending page, the sweep still settles the order); the retry link reuses its open
+  order and makes at most 5 an hour per order, 20 per address. IFZA allows 100 create + checkout
+  calls per 15 minutes per key: the site stops at `IFZA_MAX_CALLS` (90).
+- **Rate limits** (`lib/shop/limit.ts`, table `shop_rate_limits`, keys hashed): one atomic statement
+  per hit, so requests at the same moment can't get past them. `tests/limits.test.ts` tries every
+  limit on a database.
 - **Database user:** made and given its permissions on the server by hand (not by this project).
   It needs everything on the `shop_` tables (the site makes them), and on the members app's tables:
   read `events`, `membership_tiers`, `ticket_types`; read and add `users`, `members`, `memberships`,
@@ -117,8 +127,8 @@ Security:
 
 The database: one, the members app's (`joia_dev` locally). Its own tables (`users`, `members`,
 `memberships`, `tickets`, ...) and the shop's, made by the site on first use: `shop_orders`,
-`shop_sign_in_failures`, `pre_registrations` (the pre-registration form), `shop_registration_attempts`,
-`shop_locks`. Times are stored in UTC, as the members app stores them.
+`shop_sign_in_failures`, `pre_registrations` (the pre-registration form), `shop_rate_limits`,
+`shop_locks` (`shop_registration_attempts` is no longer used). Times are stored in UTC, as the members app stores them.
 Prisma's `migrate dev` in the members app sees the `shop_` tables as drift and offers to reset the
 database: answer no (it would delete everything). On the live server `migrate deploy` doesn't check this.
 
@@ -142,6 +152,7 @@ SALES_DASHBOARD=on                          # the sales dashboard (/admin, /shop
 MFA_ENCRYPTION_KEY=...                      # the members app's MFA_ENCRYPTION_KEY, same value: dashboard sign-in checks the admins' authenticator codes
 IFZA_API_KEY=ifza_ik_live_...               # issued by IFZA (starts in test mode); server only, never in the browser
 IFZA_STORE=Elixium-Events-Test              # IFZA, IFZA-Test, Elixium-Events or Elixium-Events-Test: a -Test store while the key is in test mode
+IFZA_MAX_CALLS=90                           # optional: the site's cap on IFZA create + checkout calls per 15 minutes (IFZA's own limit is 100)
 EMAIL_DRIVER=postmark                       # postmark sends the emails through Postmark, smtp through SMTP_URL, console only writes them to the log
 EMAIL_FROM="CLUB JOIA 300 <noreply@clubjoia300.com>"   # must be a confirmed Sender Signature (or verified domain) in Postmark
 POSTMARK_SERVER_TOKEN=...                   # Postmark: Servers > <server> > API Tokens; the server's IP must be in Postmark's IP allow list
@@ -167,7 +178,7 @@ still open the full site with `?dev=<MAINTENANCE_KEY>`.
   package's `register.php`; now `pre_registrations` in the same database (one row per
   submission, the same email may come several times). Spam protection as before: a hidden field bots fill in, a minimum fill
   time of 3 seconds, only from this site's own page, 5 submissions per hour per connection (an
-  anonymised code, `shop_registration_attempts`; the IP address itself is never stored).
+  anonymised code, counted in `shop_rate_limits`; the IP address itself is never stored).
 - Emails: the team (`PREREG_NOTIFY_EMAIL`) about each one, the guest a short confirmation.
 - `/admin/registrations` — the list, search and CSV download, behind the dashboard's sign-in (was
   the package's PHP admin with its own password).

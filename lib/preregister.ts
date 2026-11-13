@@ -9,6 +9,7 @@
  */
 import crypto from 'node:crypto';
 import { db } from './shop/db';
+import { hit } from './shop/limit';
 import { send } from './shop/email';
 import { countries } from './countries';
 import { shopConfig } from './shop/config';
@@ -65,10 +66,10 @@ export async function preregister(s: Submission): Promise<Reply> {
   let again = false;
   try {
     const ip = ipHash(s.ip);
-    await db.query('DELETE FROM shop.registration_attempts WHERE at < NOW(3) - INTERVAL 1 HOUR');
-    const n = Number((await db.query('SELECT COUNT(*) AS n FROM shop.registration_attempts WHERE ip_hash = $1', [ip])).rows[0].n);
-    if (n >= PER_HOUR) return { status: 429, body: { ok: false, error: 'Too many attempts from this connection. Please try again in an hour.' } };
-    await db.query('INSERT INTO shop.registration_attempts (ip_hash) VALUES ($1)', [ip]);
+    // counted atomically (lib/shop/limit.ts): submissions at the same moment can't all get through
+    if (!(await hit('prereg:' + ip, PER_HOUR, 60 * 60))) {
+      return { status: 429, body: { ok: false, error: 'Too many attempts from this connection. Please try again in an hour.' } };
+    }
 
     // every submission is a row of its own; "again" when this email has sent the form before
     again = Number((await db.query('SELECT COUNT(*) AS n FROM pre_registrations WHERE email = $1', [r.email])).rows[0].n) > 0;

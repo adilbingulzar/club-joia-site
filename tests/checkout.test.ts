@@ -14,8 +14,8 @@ async function checkout(buyer: Record<string, unknown> = {}, items: unknown[] = 
   const { POST } = await import('@/app/api/checkout/route');
   const res = await POST(new Request('http://site.test/api/checkout', {
     method: 'POST',
-    // the buyer's address as a proxy in front of the site passes it
-    headers: { 'X-Forwarded-For': '203.0.113.7, 10.0.0.1' },
+    // a made-up first entry from the buyer, then the address nginx added: only nginx's counts
+    headers: { 'X-Forwarded-For': '10.0.0.1, 203.0.113.7' },
     body: JSON.stringify({ items, buyer: { ...BUYER, ...buyer } })
   }));
   return { status: res.status, body: await res.json() };

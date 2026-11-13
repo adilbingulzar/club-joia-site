@@ -11,12 +11,19 @@
  *   then takes the whole window there.
  *
  * next.config.ts lets this site, and only this site, frame this page.
+ * Limits: 20 per order and 60 per address in 15 minutes; past them the pending page, without asking
+ * IFZA (the status sweep still settles the order).
  */
 import { settle, sitePage } from '@/lib/shop/orders';
 import { breakOut, guarded, notFound, tellParent } from '@/lib/shop/http';
+import { hit } from '@/lib/shop/limit';
+import { clientIp } from '@/lib/ip-allowlist';
 
-async function back(ref: string): Promise<Response> {
+async function back(ref: string, request: Request): Promise<Response> {
   return guarded('return ' + ref, async function () {
+    if (!(await hit('return:ip:' + clientIp(request.headers), 60, 15 * 60)) || !(await hit('return:ref:' + ref, 20, 15 * 60))) {
+      return breakOut(sitePage('pending', ref));
+    }
     const status = await settle(ref);
     return status ? breakOut(sitePage(status, ref)) : notFound('Order not found');
   }, function () {
@@ -31,10 +38,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ ref: string
     url.searchParams.set('whole', '1');
     return tellParent(ref, String(url.searchParams.get('payment_id') || '').slice(0, 100), url.pathname + url.search);
   }
-  return back(ref);
+  return back(ref, request);
 }
 
 // in case the gateway comes back with a POST
 export async function POST(request: Request, ctx: { params: Promise<{ ref: string }> }) {
-  return back((await ctx.params).ref);
+  return back((await ctx.params).ref, request);
 }

@@ -10,6 +10,7 @@ import { getCatalog } from '@/lib/catalog';
 import { shopConfig } from '@/lib/shop/config';
 import { buyTickets, preparePayment, ticketTypes } from '@/lib/shop/orders';
 import { isOver21, UNDER_21 } from '@/lib/age';
+import { clientIp } from '@/lib/ip-allowlist';
 
 type Buyer = {
   firstName: string; lastName: string; email: string; repeatEmail: string;
@@ -92,8 +93,9 @@ export async function POST(request: Request) {
       countryCode: buyerCountry.code,
       countryPhoneCode: country(buyer.phoneCode)!.dial,
       phoneNumber: buyer.phone,
-      // the buyer's address, for the shop's limit on unpaid orders
-      ip: (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || request.headers.get('x-real-ip') || ''
+      // the buyer's address, for the shop's limit on unpaid orders: the one nginx added (the last
+      // X-Forwarded-For entry), not one the buyer wrote
+      ip: clientIp(request.headers)
     };
     // left out when empty
     if (buyer.gender) form.gender = buyer.gender;

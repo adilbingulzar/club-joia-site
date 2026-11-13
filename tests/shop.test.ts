@@ -180,7 +180,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
   beforeAll(async function () {
     Object.assign(process.env, {
       ...dbEnv(DB_URL), SHOP_EVENT: EVENT, SHOP_CURRENCY: 'USD', SHOP_SITE_URL: SITE, SHOP_PUBLIC_URL: '',
-      SHOP_ADMIN_KEY: ADMIN_KEY, IFZA_API_KEY: IFZA_KEY, IFZA_STORE: 'Elixium-Events-Test', IFZA_URL: await startStub(),
+      SHOP_ADMIN_KEY: ADMIN_KEY, IFZA_API_KEY: IFZA_KEY, IFZA_STORE: 'Elixium-Events-Test', IFZA_URL: await startStub(), IFZA_MAX_CALLS: '100000',
       EMAIL_DRIVER: 'console', SHOP_SUPPORT_PHONE: '+971 50 000 0000', PREREG_NOTIFY_EMAIL: 'team@example.com', PREREG_SEND_CONFIRMATION: '1',
       MFA_ENCRYPTION_KEY: MFA_KEY
     });
