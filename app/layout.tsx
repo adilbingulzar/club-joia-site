@@ -5,6 +5,7 @@ import { CatalogProvider } from '@/lib/prices';
 
 // Prices come from Alfred (lib/catalog), so pages are rendered per request, not at build time.
 // The catalogue is handed over unresolved, the page doesn't wait for it.
+// Rendering per request is also what puts the request's nonce on Next.js's scripts (lib/csp.ts).
 export const dynamic = 'force-dynamic';
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };

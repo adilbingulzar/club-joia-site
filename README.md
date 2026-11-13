@@ -100,8 +100,10 @@ Security:
 - **Payment status comes from IFZA only** (`PAID`), never from a request; reference, payment id,
   amount and currency must match the order.
 - **The API key stays on the server** (`IFZA_API_KEY`, sent in `X-Api-Key`), never in the browser.
-- **Content-Security-Policy:** Telr's script and frames (`secure.telr.com`) are allowed on `/pay/<ref>`
-  only; only `/shop/return/<ref>` may be framed, by this site only (`next.config.ts`).
+- **Content-Security-Policy** (`lib/csp.ts`, set by `proxy.ts`): no inline script runs without the
+  request's nonce, a fresh one for every request (Next.js puts it on its own scripts; pages are
+  rendered per request). Telr's script and frames (`secure.telr.com`) are allowed on `/pay/<ref>`
+  only; only `/shop/return/<ref>` may be framed, by this site only.
 - **The visitor's address** for every limit is the LAST `X-Forwarded-For` entry, the one nginx
   adds (`clientIp`, `lib/ip-allowlist.ts`), never the first one, which the visitor can write.
 - **Unpaid orders** (in the last hour): 50 per email and 50 per buyer address, so nobody fills the

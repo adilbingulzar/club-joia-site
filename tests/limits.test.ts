@@ -237,7 +237,10 @@ describe.skipIf(!DB_URL)('rate limits on a database', function () {
 
     it('50 unpaid orders from one address: the 51st is refused, other addresses still work', async function () {
       const ip = freshIp();
-      for (let i = 0; i < 50; i++) expect((await checkout(mail('coip' + i), ip)).status).toBe(200);
+      for (let i = 0; i < 50; i++) {
+        const r = await checkout(mail('coip' + i), ip);
+        expect(r.status, JSON.stringify(r.body)).toBe(200);
+      }
       expect((await checkout(mail('coip-new'), ip)).body.error).toBe(UNFINISHED);
       expect((await checkout(mail('coip-new'), freshIp())).status).toBe(200);
     });

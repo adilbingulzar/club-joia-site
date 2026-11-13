@@ -515,7 +515,9 @@ async function cleanup() {
       );
     });
   }
-  await pool.query("DELETE FROM shop.payment_logs WHERE reference IN (SELECT ref FROM shop.orders WHERE email LIKE 'shoptest+%@example.com') OR payment_id IN (SELECT pay_id FROM shop.orders WHERE email LIKE 'shoptest+%@example.com' AND pay_id IS NOT NULL)");
-  await pool.query("DELETE FROM shop.orders WHERE email LIKE 'shoptest+%@example.com'");
-  await pool.query("DELETE FROM pre_registrations WHERE email LIKE 'shoptest+%@example.com'");
+  // not tests/limits.test.ts's (shoptest+lim-...): it may be running at the same time and removes its own
+  const ours = "email LIKE 'shoptest+%@example.com' AND email NOT LIKE 'shoptest+lim-%'";
+  await pool.query('DELETE FROM shop.payment_logs WHERE reference IN (SELECT ref FROM shop.orders WHERE ' + ours + ') OR payment_id IN (SELECT pay_id FROM shop.orders WHERE ' + ours + ' AND pay_id IS NOT NULL)');
+  await pool.query('DELETE FROM shop.orders WHERE ' + ours);
+  await pool.query('DELETE FROM pre_registrations WHERE ' + ours);
 }

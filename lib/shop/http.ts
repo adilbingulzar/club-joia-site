@@ -52,13 +52,19 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
 }
 
+// the script tag of these pages: the Content-Security-Policy (proxy.ts) runs only inline scripts
+// with this request's nonce (the x-nonce request header)
+function scriptTag(nonce: string | null | undefined): string {
+  return nonce ? '<script nonce="' + escapeHtml(nonce) + '">' : '<script>';
+}
+
 // a small page that takes the whole window (out of the frame) to the site's page
-export function breakOut(url: string): Response {
+export function breakOut(url: string, nonce?: string | null): Response {
   const js = JSON.stringify(url).replace(/</g, '\\u003c');
   const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex">' +
     '<title>Club JOIA 300</title></head><body style="background:#050505;color:#f5f3ee;font-family:sans-serif;text-align:center;padding:40px 16px">' +
     '<p>Checking your payment…</p><p><a style="color:inherit" target="_top" href="' + escapeHtml(url) + '">Continue</a></p>' +
-    '<script>(function(){var u=' + js + ';try{window.top.location.replace(u);}catch(e){location.replace(u);}})();</script>' +
+    scriptTag(nonce) + '(function(){var u=' + js + ';try{window.top.location.replace(u);}catch(e){location.replace(u);}})();</script>' +
     '</body></html>';
   return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Next-Page': url } });
 }
@@ -72,13 +78,13 @@ export function breakOut(url: string): Response {
  */
 export const RETURN_MESSAGE = 'cj300-payment-return';
 
-export function tellParent(ref: string, paymentId: string, wholePage: string): Response {
+export function tellParent(ref: string, paymentId: string, wholePage: string, nonce?: string | null): Response {
   const msg = JSON.stringify(JSON.stringify({ type: RETURN_MESSAGE, ref, paymentId })).replace(/</g, '\\u003c');
   const next = JSON.stringify(wholePage).replace(/</g, '\\u003c');
   const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex">' +
     '<title>Club JOIA 300</title></head><body style="background:#fff;color:#111;font-family:sans-serif;text-align:center;padding:40px 16px">' +
     '<p>Checking your payment…</p>' +
-    '<script>(function(){if(window.top&&window.top!==window){window.top.postMessage(' + msg + ',location.origin);}' +
+    scriptTag(nonce) + '(function(){if(window.top&&window.top!==window){window.top.postMessage(' + msg + ',location.origin);}' +
     'else{location.replace(' + next + ');}})();</script>' +
     '</body></html>';
   return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Return': 'frame' } });

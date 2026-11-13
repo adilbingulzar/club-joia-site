@@ -1,6 +1,9 @@
 /*
  * Runs for every request (no matcher), files and APIs included.
  *
+ * Content-Security-Policy (lib/csp.ts): a fresh nonce for every request, in the policy sent back and
+ * in the request headers, where Next.js (its own scripts) and the shop's pages (x-nonce) find it.
+ *
  * IP allowlist: with IP_ALLOWLIST set, only those addresses get anything, see lib/ip-allowlist.ts.
  *
  * Maintenance: while MAINTENANCE_MODE=true visitors get the pre-registration page at / (its form:
@@ -12,6 +15,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { allowlistVerdict } from '@/lib/ip-allowlist';
+import { contentSecurityPolicy, newNonce } from '@/lib/csp';
 
 const PARAM = 'dev';
 const COOKIE = 'cj300-dev';
@@ -28,11 +32,23 @@ export const MAINTENANCE_PATHS = '/((?!_next/static|_next/image|assets/img/logo\
 const closesForMaintenance = new RegExp('^' + MAINTENANCE_PATHS + '$');
 
 export function proxy(request: NextRequest) {
+  const nonce = newNonce();
+  const policy = contentSecurityPolicy(nonce, request.nextUrl.pathname);
+  const headers = new Headers(request.headers);
+  headers.set('x-nonce', nonce);
+  headers.set('Content-Security-Policy', policy);
+  const res = answer(request, { request: { headers } });
+  res.headers.set('Content-Security-Policy', policy);
+  return res;
+}
+
+// what the request gets; pass = the request headers with the nonce, for the page that renders
+function answer(request: NextRequest, pass: { request: { headers: Headers } }): NextResponse {
   if (allowlistVerdict(request.headers) === false) {
     return new NextResponse('Access denied.', { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
   }
-  if (process.env.MAINTENANCE_MODE !== 'true') return NextResponse.next();
-  if (!closesForMaintenance.test(request.nextUrl.pathname)) return NextResponse.next();
+  if (process.env.MAINTENANCE_MODE !== 'true') return NextResponse.next(pass);
+  if (!closesForMaintenance.test(request.nextUrl.pathname)) return NextResponse.next(pass);
 
   const key = process.env.MAINTENANCE_KEY;
   const url = request.nextUrl;
@@ -44,9 +60,9 @@ export function proxy(request: NextRequest) {
     return res;
   }
 
-  if (key && request.cookies.get(COOKIE)?.value === key) return NextResponse.next();
+  if (key && request.cookies.get(COOKIE)?.value === key) return NextResponse.next(pass);
 
-  if (url.pathname === '/') return NextResponse.rewrite(new URL(PAGE, request.url));
+  if (url.pathname === '/') return NextResponse.rewrite(new URL(PAGE, request.url), pass);
   if (url.pathname.startsWith('/api/')) {
     return new NextResponse('The site is under maintenance.', {
       status: 503,

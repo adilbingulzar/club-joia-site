@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import nextConfig, { CONTENT_SECURITY_POLICY, PAYMENT_PAGE_POLICY } from '../next.config';
+import nextConfig from '../next.config';
+import { contentSecurityPolicy, TELR } from '../lib/csp';
+import { breakOut, tellParent } from '../lib/shop/http';
 import { MAINTENANCE_PATHS, proxy } from '../proxy';
 import { allowed, allowlistVerdict, clientIp, parseAllowlist } from '../lib/ip-allowlist';
 
@@ -192,15 +194,8 @@ describe('security headers', function () {
   it('are sent on pages, APIs and the pre-registration page', async function () {
     for (const path of ['/', '/tickets', '/api/checkout', '/preregister/index.html', '/shop/pay/CJ1']) {
       const keys = await rulesFor(path);
-      expect(keys).toEqual(expect.arrayContaining(['Strict-Transport-Security', 'X-Frame-Options', 'X-Content-Type-Options', 'Referrer-Policy', 'Permissions-Policy', 'Content-Security-Policy']));
+      expect(keys).toEqual(expect.arrayContaining(['Strict-Transport-Security', 'X-Frame-Options', 'X-Content-Type-Options', 'Referrer-Policy', 'Permissions-Policy']));
     }
-  });
-
-
-  it('allow nothing from other domains', function () {
-    expect(CONTENT_SECURITY_POLICY).not.toMatch(/https?:|\*/);
-    expect(CONTENT_SECURITY_POLICY).toContain("frame-ancestors 'none'");
-    expect(CONTENT_SECURITY_POLICY).toContain("object-src 'none'");
   });
 
   it('hide X-Powered-By', function () {
@@ -218,23 +213,79 @@ describe('security headers', function () {
     return out;
   };
 
-  it('let Telr\'s card fields (script and frame) load on the payment page only', async function () {
-    const pay = await effective('/pay/CJ123');
-    expect(pay['Content-Security-Policy']).toBe(PAYMENT_PAGE_POLICY);
-    expect(PAYMENT_PAGE_POLICY).toContain("script-src 'self' 'unsafe-inline' https://secure.telr.com");
-    expect(PAYMENT_PAGE_POLICY).toContain("frame-src 'self' https://secure.telr.com");
-    expect(PAYMENT_PAGE_POLICY).toContain("frame-ancestors 'none'");
-    expect(pay['X-Frame-Options']).toBe('DENY');
-    for (const path of ['/', '/summary', '/tickets', '/pay', '/pay/CJ1/x', '/thank-you']) {
-      expect((await effective(path))['Content-Security-Policy'], path).toBe(CONTENT_SECURITY_POLICY);
+  it('let only this site frame the bank check\'s return page', async function () {
+    expect((await effective('/shop/return/CJ123'))['X-Frame-Options']).toBe('SAMEORIGIN');
+    expect((await effective('/shop/pay/CJ123'))['X-Frame-Options']).toBe('DENY');
+    expect((await effective('/pay/CJ123'))['X-Frame-Options']).toBe('DENY');
+  });
+});
+
+describe('Content-Security-Policy', function () {
+  const visit = function (path: string) {
+    return proxy(new NextRequest('https://club.example.com' + path));
+  };
+  const nonceOf = function (policy: string) {
+    return (/'nonce-([^']+)'/.exec(policy) || [])[1];
+  };
+
+  it('runs no inline script without a fresh nonce, on every response', async function () {
+    vi.stubEnv('MAINTENANCE_MODE', 'false');
+    const seen = new Set<string>();
+    for (const path of ['/', '/tickets', '/api/checkout', '/preregister/index.html', '/shop/pay/CJ1', '/assets/img/logo.png']) {
+      const policy = visit(path).headers.get('content-security-policy') || '';
+      const nonce = nonceOf(policy);
+      expect(nonce, path).toMatch(/^[A-Za-z0-9+/]{22}==$/);
+      seen.add(nonce);
+      expect(policy).toMatch(/script-src 'self' 'nonce-[^']+'(;| )/);
+      expect(policy).not.toMatch(/script-src[^;]*unsafe-inline/);
     }
+    expect(seen.size).toBe(6);
   });
 
-  it('let only this site frame the bank check\'s return page', async function () {
-    const ret = await effective('/shop/return/CJ123');
-    expect(ret['X-Frame-Options']).toBe('SAMEORIGIN');
-    expect(ret['Content-Security-Policy']).toContain("frame-ancestors 'self'");
-    expect(ret['Content-Security-Policy']).not.toMatch(/telr/);
-    expect((await effective('/shop/pay/CJ123'))['X-Frame-Options']).toBe('DENY');
+  it('hands the same nonce to the page that renders (Next.js reads it from the request)', function () {
+    vi.stubEnv('MAINTENANCE_MODE', 'false');
+    const res = visit('/tickets');
+    const nonce = nonceOf(res.headers.get('content-security-policy') || '');
+    // NextResponse.next({ request: { headers } }) passes request headers on as x-middleware-request-*
+    expect(res.headers.get('x-middleware-request-x-nonce')).toBe(nonce);
+    expect(res.headers.get('x-middleware-request-content-security-policy')).toContain("'nonce-" + nonce + "'");
+  });
+
+  it('also with maintenance on, the pre-registration page and redirects included', function () {
+    vi.stubEnv('MAINTENANCE_MODE', 'true');
+    for (const path of ['/', '/tickets', '/api/checkout']) {
+      expect(visit(path).headers.get('content-security-policy'), path).toMatch(/'nonce-/);
+    }
+    expect(visit('/').headers.get('x-middleware-request-x-nonce')).toBeTruthy();
+  });
+
+  it('allows nothing from other domains, except Telr on the payment page', function () {
+    const policy = contentSecurityPolicy('abc', '/tickets', false);
+    expect(policy).not.toMatch(/https?:|\*/);
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(policy).toContain("object-src 'none'");
+    expect(policy).toContain("script-src 'self' 'nonce-abc';");
+
+    const pay = contentSecurityPolicy('abc', '/pay/CJ123', false);
+    expect(pay).toContain("script-src 'self' 'nonce-abc' " + TELR + ';');
+    expect(pay).toContain("frame-src 'self' " + TELR);
+    expect(pay).toContain("frame-ancestors 'none'");
+    for (const path of ['/', '/summary', '/tickets', '/pay', '/pay/CJ1/x', '/thank-you', '/shop/return/CJ1']) {
+      expect(contentSecurityPolicy('abc', path, false), path).not.toMatch(/telr/);
+    }
+    expect(contentSecurityPolicy('abc', '/tickets', true)).toContain("script-src 'self' 'nonce-abc' 'unsafe-eval';");
+  });
+
+  it('lets only this site frame the bank check\'s return page', function () {
+    expect(contentSecurityPolicy('abc', '/shop/return/CJ123', false)).toContain("frame-ancestors 'self'");
+    expect(contentSecurityPolicy('abc', '/shop/pay/CJ123', false)).toContain("frame-ancestors 'none'");
+  });
+
+  it('puts the nonce on the shop\'s own little pages', async function () {
+    const out = await breakOut('https://club.example.com/thank-you', 'n0nce+/=').text();
+    expect(out).toContain('<script nonce="n0nce+/=">');
+    const framed = await tellParent('CJ1', 'pay_1', '/shop/return/CJ1?whole=1', 'xyz').text();
+    expect(framed).toContain('<script nonce="xyz">');
+    expect(await breakOut('/x').text()).toContain('<script>');
   });
 });

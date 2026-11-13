@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: 'Payment | Club JOIA 300', robots: { 
 
 /*
  * Step 3: the card payment of an order (lib/shop/orders.ts preparePayment). Telr's card fields
- * (IFZA's gateway) load here from secure.telr.com: next.config.ts allows that on this page only,
+ * (IFZA's gateway) load here from secure.telr.com: lib/csp.ts allows that on this page only,
  * which the buyer always reaches as a full page load (the checkout and the payment link).
  */
 export default async function PayPage({ params }: { params: Promise<{ ref: string }> }) {
