@@ -15,6 +15,7 @@
  */
 import { shopConfig as config } from './config';
 import { hit } from './limit';
+import { side } from './db';
 
 const PATH = '/api/integrations/v1/payments';
 
@@ -31,17 +32,20 @@ export function configured(): boolean {
 
 // { status, body } of a call; null when IFZA can't be reached. Create and checkout share IFZA's
 // limit of 100 per 15 minutes: past this site's own cap (config) they aren't sent, and answer as
-// IFZA's 429 would (busy, try again later).
+// IFZA's 429 would (busy, try again later). Every call is saved in shop.payment_logs (saveLog).
 async function request(path: string, payload: unknown): Promise<{ status: number; body: Answer } | null> {
+  const sent = { ...(payload as Record<string, unknown>) };
+  if (sent.card_token) sent.card_token = '[hidden]';
+  const call = path.replace('/', '') || 'create';
   if (path !== '/status' && !(await hit('ifza:calls', config.ifza.maxCallsPer15Min, 15 * 60))) {
     console.error('[shop] ifza: this site\'s cap of ' + config.ifza.maxCallsPer15Min + ' calls per 15 minutes is reached');
+    await saveLog(call, sent, null, null, 'not sent: this site\'s cap of ' + config.ifza.maxCallsPer15Min + ' calls per 15 minutes', 0);
     return { status: 429, body: { ok: false, error: 'rate_limited', message: 'site cap' } };
   }
   // TEMPORARY, for testing on live (pm2 error log): the payload sent to IFZA (card token hidden) and its raw answer
-  const name = '[shop] ifza ' + (path || '/create');
-  const sent = { ...(payload as Record<string, unknown>) };
-  if (sent.card_token) sent.card_token = '[hidden]';
+  const name = '[shop] ifza /' + call;
   console.error(name + ' POST ' + config.ifza.url + PATH + path + ' payload: ' + JSON.stringify(sent));
+  const started = Date.now();
   try {
     const r = await fetch(config.ifza.url + PATH + path, {
       method: 'POST',
@@ -58,10 +62,32 @@ async function request(path: string, payload: unknown): Promise<{ status: number
     } catch {
       body = { ok: false, error: 'not_json', message: text.slice(0, 500) };
     }
+    await saveLog(call, sent, r.status, text, null, Date.now() - started, body);
     return { status: r.status, body };
   } catch (e) {
     console.error('[shop] ifza request failed:', (e as Error).message);
+    await saveLog(call, sent, null, null, (e as Error).message, Date.now() - started);
     return null;
+  }
+}
+
+/*
+ * One row in shop.payment_logs per call: the call, the order's reference and IFZA's payment id (from
+ * what was sent or IFZA's answer), what was sent (card token hidden; the key is a header, never in
+ * here), the HTTP status and IFZA's answer as it came. On the side pool (a payment may be inside a
+ * transaction). A log that can't be saved never stops the payment: it goes to the server log.
+ */
+async function saveLog(call: string, sent: Record<string, unknown>, status: number | null, response: string | null, error: string | null, ms: number, body?: Answer) {
+  const b = body && typeof body === 'object' ? body : {};
+  const pick = function (v: unknown) { return typeof v === 'string' && v ? v.slice(0, 191) : null; };
+  try {
+    await side.query(
+      'INSERT INTO shop.payment_logs (call_name, reference, payment_id, http_status, request, response, error, duration_ms) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [call, pick(sent.reference) || pick(b.reference), pick(sent.payment_id) || pick(b.payment_id), status, JSON.stringify(sent),
+        response === null ? null : response.slice(0, 100000), error ? error.slice(0, 500) : null, ms]
+    );
+  } catch (e) {
+    console.error('[shop] ifza log not saved (' + call + '):', (e as Error).message);
   }
 }
 

@@ -18,7 +18,7 @@ type Shared = { pool: Pool | null; key?: string; ready: Promise<void> | null; ma
 // one pool per server, also across the dev server's reloads
 const shared: Shared = ((globalThis as unknown as { __cjShopMysql?: Shared }).__cjShopMysql ||= { pool: null, ready: null });
 
-const SHOP_TABLES = ['orders', 'sign_in_failures', 'registration_attempts', 'rate_limits', 'locks'];
+const SHOP_TABLES = ['orders', 'sign_in_failures', 'registration_attempts', 'rate_limits', 'locks', 'payment_logs'];
 
 type Settings = { host: string; port: number; user: string; password: string; database: string };
 
@@ -189,6 +189,23 @@ async function migrate(): Promise<void> {
       count         INT NOT NULL,
       window_start  DATETIME(3) NOT NULL,
       KEY rate_limits_window (window_start)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    // every call to IFZA's payment API (lib/shop/ifza.ts): what was sent (card token hidden, never
+    // the key) and IFZA's answer as it came, for checking a payment and for IFZA's support
+    `CREATE TABLE IF NOT EXISTS shop.payment_logs (
+      id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      call_name    VARCHAR(20) NOT NULL,             -- create, checkout or status
+      reference    VARCHAR(64) NULL,                 -- the order's ref (create, and in IFZA's answers)
+      payment_id   VARCHAR(191) NULL,                -- IFZA's payment id
+      http_status  INT NULL,                         -- NULL: IFZA couldn't be reached (error says why)
+      request      JSON NULL,
+      response     MEDIUMTEXT NULL,
+      error        VARCHAR(500) NULL,
+      duration_ms  INT NULL,
+      created_at   DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      KEY payment_logs_reference (reference, created_at),
+      KEY payment_logs_payment (payment_id, created_at),
+      KEY payment_logs_created (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     // rows to lock: "stock" lets one order at a time past the stock check (lib/shop/orders.ts)
     `CREATE TABLE IF NOT EXISTS shop.locks (

@@ -297,6 +297,18 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect(done.fulfilled_at).toBeTruthy();
     expect(done.tickets).toHaveLength(10);
 
+    // every IFZA call is in the payment logs, with IFZA's answer; the card token never is
+    const logs = (await pool.query('SELECT call_name, reference, payment_id, http_status, request, response FROM shop.payment_logs WHERE reference = $1 OR payment_id = $2 ORDER BY id', [ref1, p1.id])).rows;
+    expect(logs[0]).toMatchObject({ call_name: 'create', reference: ref1, payment_id: p1.id, http_status: 200 });
+    expect(logs[0].request).toMatchObject({ reference: ref1, amount: 21000, currency: 'USD', customer: { country: 'PK' } });
+    expect(JSON.parse(logs[0].response)).toMatchObject({ ok: true, payment_id: p1.id });
+    const checkouts = logs.filter(function (l) { return l.call_name === 'checkout'; });
+    expect(checkouts.length).toBeGreaterThan(0);
+    checkouts.forEach(function (l) { expect(l.request).toEqual({ payment_id: p1.id, card_token: '[hidden]' }); });
+    expect(logs.filter(function (l) { return l.call_name === 'status'; }).length).toBeGreaterThanOrEqual(4);
+    expect(JSON.stringify(logs)).not.toContain('tok_ok');
+    expect(JSON.stringify(logs)).not.toContain(IFZA_KEY);
+
     const user = await one('SELECT * FROM users WHERE email = $1', [email]);
     expect(user).toMatchObject({ role: 'MEMBER', status: 'PENDING_ACTIVATION' });
     expect((await one('SELECT COUNT(*) AS n FROM auth_tokens WHERE user_id = $1', [user.id])).n).toBe(0);
@@ -597,6 +609,7 @@ async function cleanup() {
       );
     });
   }
+  await pool.query("DELETE FROM shop.payment_logs WHERE reference IN (SELECT ref FROM shop.orders WHERE email LIKE 'shoptest+%@example.com') OR payment_id IN (SELECT pay_id FROM shop.orders WHERE email LIKE 'shoptest+%@example.com' AND pay_id IS NOT NULL)");
   await pool.query("DELETE FROM shop.orders WHERE email LIKE 'shoptest+%@example.com'");
   await pool.query("DELETE FROM pre_registrations WHERE email LIKE 'shoptest+%@example.com'");
   await pool.query("DELETE FROM shop.sign_in_failures WHERE bucket LIKE 'email:shoptest+%' OR bucket IN ('ip:10.6.6.6', 'ip:10.6.6.5', 'ip:10.9.9.9', 'email:admin@joia.test', 'email:alex.carter@joia.test')");

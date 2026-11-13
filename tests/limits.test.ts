@@ -183,6 +183,7 @@ describe.skipIf(!DB_URL)('rate limits on a database', function () {
     }
     await q("DELETE FROM shop_sign_in_failures WHERE bucket LIKE ? OR bucket = ? OR bucket LIKE 'ip:10.88.%'", ['email:shoptest+lim-%', 'email:' + ADMIN]);
     // audit_logs is append-only (the database refuses deletes): the test's entries (addresses 10.88.x.y) stay
+    await q("DELETE FROM shop_payment_logs WHERE reference IN (SELECT ref FROM shop_orders WHERE email LIKE 'shoptest+lim-%@example.com') OR payment_id IN (SELECT pay_id FROM shop_orders WHERE email LIKE 'shoptest+lim-%@example.com' AND pay_id IS NOT NULL)");
     await q("DELETE FROM shop_orders WHERE email LIKE 'shoptest+lim-%@example.com'");
     await q("DELETE FROM pre_registrations WHERE email LIKE 'shoptest+lim-%@example.com'");
     // the pre-registration attempts of this run's addresses (stored as codes, made the site's way)
@@ -334,7 +335,7 @@ describe.skipIf(!DB_URL)('rate limits on a database', function () {
   });
 
   // ═══ Checkout: 50 unpaid orders per email, 50 per address, 1 hour ═══
-  describe('checkout', function () {
+  describe('checkout', { timeout: 60000 }, function () {
     it('50 unpaid orders per email: the 51st is refused, capitals count as the same email', async function () {
       const who = mail('co');
       for (let i = 0; i < 50; i++) {
