@@ -37,6 +37,11 @@ async function request(path: string, payload: unknown): Promise<{ status: number
     console.error('[shop] ifza: this site\'s cap of ' + config.ifza.maxCallsPer15Min + ' calls per 15 minutes is reached');
     return { status: 429, body: { ok: false, error: 'rate_limited', message: 'site cap' } };
   }
+  // TEMPORARY, for testing on live (pm2 error log): the payload sent to IFZA (card token hidden) and its raw answer
+  const name = '[shop] ifza ' + (path || '/create');
+  const sent = { ...(payload as Record<string, unknown>) };
+  if (sent.card_token) sent.card_token = '[hidden]';
+  console.error(name + ' POST ' + config.ifza.url + PATH + path + ' payload: ' + JSON.stringify(sent));
   try {
     const r = await fetch(config.ifza.url + PATH + path, {
       method: 'POST',
@@ -46,11 +51,7 @@ async function request(path: string, payload: unknown): Promise<{ status: number
       signal: AbortSignal.timeout(30000)
     });
     const text = await r.text();
-    // TEMPORARY, for testing on live: what we sent (card token hidden) and IFZA's raw answer
-    const sent = { ...(payload as Record<string, unknown>) };
-    if (sent.card_token) sent.card_token = '[hidden]';
-    console.log('[shop] ifza ' + (path || '/create') + ' sent: ' + JSON.stringify(sent));
-    console.log('[shop] ifza ' + (path || '/create') + ' answer HTTP ' + r.status + ': ' + text.slice(0, 3000));
+    console.error(name + ' answer HTTP ' + r.status + ': ' + text.replace(/\s+/g, ' ').slice(0, 3000));
     let body: Answer;
     try {
       body = JSON.parse(text);
