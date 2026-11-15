@@ -39,49 +39,45 @@ const packages: Package[] = [
 ];
 
 const rubyPerks = [
+  'Mega yacht access',
   'Open bar',
-  'Premium food',
+  'Premium culinary experience',
   'Track viewing',
-  'DJ / entertainment',
+  'DJ entertainment',
   'After-race celebrations',
-  'Networking with peers',
-  'Shuttle service',
-  'Membership application'
+  'Daytime sundeck access'
 ];
 const pearlyPerks = rubyPerks.concat([
-  'Priority seating / deck zone',
-  'Chauffeur transfers',
-  'Premium F&B',
-  'VIP lounge access',
-  'Fast-track marina logistics'
+  'Priority access',
+  'Premium beverages',
+  'VIP after-party sundeck access',
+  'Chauffeur transfers (shared)'
 ]);
 const ultraPerks = pearlyPerks.concat([
-  'Private chauffeur',
-  'VVIP parking',
-  'Premium plus F&B',
-  'Reserved table and seating',
-  'Dedicated waiter'
+  'Chauffeur transfers with a dedicated driver, or VIP parking',
+  'Premium plus beverage range',
+  'Personal concierge'
 ]);
 
 const tiers: Tier[] = [
   {
     id: 'ruby-red', name: 'Ruby Red', swatch: 'ruby', page: '/ruby-red',
     card: '/assets/img/cards/ruby-red.webp',
-    intro: 'The essential Club JOIA 300 experience: open bar, premium food and the best view of the track.',
+    intro: 'The essential Club JOIA 300 experience: mega yacht access, open bar, a premium culinary experience and the best view of the track.',
     perks: rubyPerks, newFrom: 0,
     prices: { '3-days': 8000, 'sat-sun': 6800, 'fri-sun': 5200, 'fri-sat': 4000 }
   },
   {
     id: 'pearly-white', name: 'Pearly White', swatch: 'pearl', page: '/pearly-white',
     card: '/assets/img/cards/pearly-white.webp',
-    intro: 'Everything in Ruby Red, plus priority deck seating, chauffeur transfers and VIP lounge access.',
+    intro: 'Everything in Ruby Red, plus priority access, premium beverages, the VIP after-party and shared chauffeur transfers.',
     perks: pearlyPerks, newFrom: rubyPerks.length,
     prices: { '3-days': 10000, 'sat-sun': 8500, 'fri-sun': 6500, 'fri-sat': 5000 }
   },
   {
     id: 'ultra-black', name: 'Ultra Black', swatch: 'black', page: '/ultra-black',
     card: '/assets/img/cards/ultra-black.webp',
-    intro: 'The top tier: everything in Pearly White, plus a private chauffeur, a reserved table and a dedicated waiter.',
+    intro: 'The top tier: everything in Pearly White, plus a dedicated chauffeur or VIP parking, premium plus beverages and a personal concierge.',
     perks: ultraPerks, newFrom: pearlyPerks.length,
     prices: { '3-days': 15000, 'sat-sun': 12750, 'fri-sun': 9750, 'fri-sat': 7500 }
   }

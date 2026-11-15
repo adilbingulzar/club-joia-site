@@ -7,7 +7,7 @@ export type Cta = { href: string; label: string; badge?: boolean };
 export default function SiteNav({ cta, current }: { cta?: Cta; current?: string }) {
   return (
     <nav>
-      <Link className="logo" href="/" aria-label="Club JOIA 300 home"><img src="/assets/img/logo.png" alt="Club JOIA 300" /></Link>
+      <Link className="logo" href="/" aria-label="Club JOIA 300 home"><Lockup /></Link>
       {cta && (
         <div className="nav-links">
           <Link className="hide-sm" href="/ruby-red" aria-current={current === 'ruby-red' ? 'page' : undefined}>Ruby Red</Link>
@@ -17,6 +17,16 @@ export default function SiteNav({ cta, current }: { cta?: Cta; current?: string 
         </div>
       )}
     </nav>
+  );
+}
+
+/* The logo with its tagline underneath, spanning the logo's width. */
+export function Lockup({ className }: { className?: string }) {
+  return (
+    <span className={'lockup' + (className ? ' ' + className : '')}>
+      <img src="/assets/img/logo.png" alt="Club JOIA 300" />
+      <span className="lockup-tag">The ultimate Grand Prix mega yacht experience</span>
+    </span>
   );
 }
 
