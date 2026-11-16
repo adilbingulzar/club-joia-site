@@ -15,7 +15,7 @@
 export type Product = { id: string; name: string; price: number; tier: string; codes: string[]; stock: number | null; visible: boolean };
 
 const tiers = [
-  { slug: 'ruby-red', name: 'Ruby Red', prices: { '3-days': 8000, 'sat-sun': 6800, 'fri-sun': 5200, 'fri-sat': 4000 }, extra: [] as string[] },
+  { slug: 'ruby-red', name: 'Ruby Red', prices: { '3-days': 8000, 'sat-sun': 6800, 'fri-sun': 5200, 'fri-sat': 2 }, extra: [] as string[] },
   { slug: 'pearly-white', name: 'Pearly White', prices: { '3-days': 10000, 'sat-sun': 8500, 'fri-sun': 6500, 'fri-sat': 5000 }, extra: [] as string[] },
   // VVIP parking is an Ultra Black perk
   { slug: 'ultra-black', name: 'Ultra Black', prices: { '3-days': 15000, 'sat-sun': 12750, 'fri-sun': 9750, 'fri-sat': 7500 }, extra: ['PARK'] }
