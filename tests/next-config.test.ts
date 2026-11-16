@@ -100,6 +100,21 @@ describe('maintenance', function () {
     expect(visit('/tickets', 'cj300-dev=secret').status).toBe(200);
   });
 
+  it('/clear deletes the developer cookie and goes back to the pre-registration page', function () {
+    vi.stubEnv('MAINTENANCE_MODE', 'true');
+    vi.stubEnv('MAINTENANCE_KEY', 'secret');
+    for (const path of ['/clear', '/clear/']) {
+      const response = visit(path, 'cj300-dev=secret');
+      expect(closed(response)).toBe(true);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const cookie = response.headers.get('set-cookie') || '';
+      expect(cookie).toMatch(/^cj300-dev=;/);
+      expect(cookie).toMatch(/Max-Age=0/i);
+      expect(cookie).toMatch(/Path=\//i);
+    }
+    expect(visit('/').headers.get('x-middleware-rewrite')).toBe('https://club.example.com/preregister/index.html');
+  });
+
   it('keeps the page for a wrong key or cookie', function () {
     vi.stubEnv('MAINTENANCE_MODE', 'true');
     vi.stubEnv('MAINTENANCE_KEY', 'secret');

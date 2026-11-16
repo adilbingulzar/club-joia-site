@@ -10,7 +10,8 @@
  * app/api/preregister); every other page sends them there, other APIs answer 503.
  * Remove it or set it to false and restart the site to open it again.
  * Developers: with MAINTENANCE_KEY set, one visit to ?dev=<MAINTENANCE_KEY> opens the site for
- * that browser. That visit stores a cookie and drops the parameter from the address.
+ * that browser. That visit stores a cookie and drops the parameter from the address; /clear deletes
+ * the cookie again (back to the pre-registration page).
  */
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -19,6 +20,7 @@ import { contentSecurityPolicy, newNonce } from '@/lib/csp';
 
 const PARAM = 'dev';
 const COOKIE = 'cj300-dev';
+const CLEAR = '/clear';
 
 // what visitors see instead of the site: the pre-registration page (public/preregister)
 const PAGE = '/preregister/index.html';
@@ -46,6 +48,13 @@ export function proxy(request: NextRequest) {
 function answer(request: NextRequest, pass: { request: { headers: Headers } }): NextResponse {
   if (allowlistVerdict(request.headers) === false) {
     return new NextResponse('Access denied.', { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+  }
+  // /clear forgets the developer cookie and goes to / (the pre-registration page while in maintenance)
+  if (request.nextUrl.pathname.replace(/\/$/, '') === CLEAR) {
+    const res = NextResponse.redirect(new URL('/', request.url));
+    res.cookies.set(COOKIE, '', { httpOnly: true, secure: request.nextUrl.protocol === 'https:', sameSite: 'lax', path: '/', maxAge: 0 });
+    res.headers.set('Cache-Control', 'no-store');
+    return res;
   }
   if (process.env.MAINTENANCE_MODE !== 'true') return NextResponse.next(pass);
   if (!closesForMaintenance.test(request.nextUrl.pathname)) return NextResponse.next(pass);
