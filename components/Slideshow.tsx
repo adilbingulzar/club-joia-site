@@ -8,12 +8,14 @@ import { useEffect, useRef, useState } from 'react';
 type Slide = { src: string; video?: boolean; preload?: 'auto' | 'metadata'; pos?: string };
 
 const SLIDES: Slide[] = [
-  { src: '/assets/slides/01-yacht-f1.jpg', pos: '50% 62%' },
-  { src: '/assets/slides/02-track.mp4', video: true, preload: 'auto' },
-  { src: '/assets/slides/03-guest.jpg', pos: '50% 35%' },
-  { src: '/assets/slides/04-race.mp4', video: true, preload: 'metadata' },
-  { src: '/assets/slides/05-dj.jpg', pos: '60% 50%' },
-  { src: '/assets/slides/06-finale.mp4', video: true, preload: 'metadata' }
+  { src: '/assets/slides/new/1.jpg', pos: '50% 62%' }, // yacht + F1
+  { src: '/assets/slides/new/2.mp4', video: true, preload: 'auto' }, // party
+  { src: '/assets/slides/new/3.jpg', pos: '75% 16%' }, // Black Coffee: face and name
+  { src: '/assets/slides/new/4.mp4', video: true, preload: 'metadata' }, // race, then the food
+  { src: '/assets/slides/new/5.jpg', pos: '50% 35%' }, // guest
+  { src: '/assets/slides/new/6.jpg', pos: '78% 18%' }, // Gordo: face and name (the name runs near the right edge)
+  { src: '/assets/slides/new/7.mp4', video: true, preload: 'metadata' }, // food skewers, chef
+  { src: '/assets/slides/new/8.jpg', pos: '60% 50%' } // DJ
 ];
 const STILL_MS = 1500;
 
