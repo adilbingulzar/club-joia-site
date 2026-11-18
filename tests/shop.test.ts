@@ -344,9 +344,10 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
   it('declined: one email with a retry link, which starts a new order', async function () {
     // this buyer came from an ad (app/api/checkout passes the cookie's campaign): saved with the order
     const campaign = { utm_source: 'facebook', utm_campaign: 'gp-2026', fbclid: 'IwAR0abc', landing: '/', at: '2026-11-18T10:00:00.000Z' };
-    const o3 = await api('buyTickets', buyer({ 'tickets[0][ticketId]': 'ruby-red/fri-sat', 'tickets[0][quantity]': '1', attribution: JSON.stringify({ ...campaign, junk: 'x' }) }));
+    const o3 = await api('buyTickets', buyer({ 'tickets[0][ticketId]': 'ruby-red/fri-sat', 'tickets[0][quantity]': '1', attribution: JSON.stringify({ ...campaign, junk: 'x' }), agencyCode: 'agency 7;' }));
     ref3 = refOf(o3.body.paymentUrl);
     expect(json((await one('SELECT attribution FROM shop.orders WHERE ref = $1', [ref3]))!.attribution)).toEqual(campaign);
+    expect((await one('SELECT agency_code FROM shop.orders WHERE ref = $1', [ref3]))!.agency_code).toBe('AGENCY 7');
     await toBank(ref3);
     answers[ref3] = { status: 'DECLINED' };
     expect((await get(back(ref3))).location).toBe(SITE + '/payment/denied?orderid=' + ref3);
@@ -362,6 +363,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect(await one('SELECT retry_of, amount, status FROM shop.orders WHERE ref = $1', [ref3b])).toEqual({ retry_of: ref3, amount: '4000.00', status: 'pending' });
     // the retry keeps the ad campaign
     expect(json((await one('SELECT attribution FROM shop.orders WHERE ref = $1', [ref3b]))!.attribution)).toEqual(campaign);
+    expect((await one('SELECT agency_code FROM shop.orders WHERE ref = $1', [ref3b]))!.agency_code).toBe('AGENCY 7');
     expect((await get(String(again.location))).location).toBe(SITE + '/pay/' + ref3b);
     await toBank(ref3b);
     answers[ref3b] = { status: 'PAID' };

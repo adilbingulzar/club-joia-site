@@ -136,6 +136,7 @@ async function migrate(): Promise<void> {
       error            TEXT NULL,
       retry_of         VARCHAR(64) NULL,                -- the order a retry came from
       attribution      JSON NULL,                       -- the ad campaign the buyer came from (lib/attribution.ts)
+      agency_code      VARCHAR(50) NULL,                -- the agency (seller) code the buyer entered, optional
       created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       updated_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       paid_at          DATETIME(3) NULL,
@@ -146,6 +147,7 @@ async function migrate(): Promise<void> {
       KEY orders_email (email, created_at),
       KEY orders_ip (ip, created_at),
       KEY orders_retry_of (retry_of),
+      KEY orders_agency (agency_code),
       KEY orders_sweep (status, pay_checkout_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     // the pre-registration page (lib/preregister.ts): one row per submission, the same email may come again
@@ -225,6 +227,10 @@ async function migrate(): Promise<void> {
   const campaignCol = await run(pool(),
     "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'shop_orders' AND column_name = 'attribution' LIMIT 1");
   if (!campaignCol.rows.length) await run(pool(), 'ALTER TABLE shop.orders ADD COLUMN attribution JSON NULL AFTER retry_of');
+  // orders tables made before the agency code
+  const agencyCol = await run(pool(),
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'shop_orders' AND column_name = 'agency_code' LIMIT 1");
+  if (!agencyCol.rows.length) await run(pool(), 'ALTER TABLE shop.orders ADD COLUMN agency_code VARCHAR(50) NULL AFTER attribution, ADD KEY orders_agency (agency_code)');
   // tables made before one row per submission: email was unique there
   const unique = await run(pool(),
     "SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'pre_registrations' AND index_name = 'registrations_email' AND non_unique = 0 LIMIT 1");

@@ -16,13 +16,18 @@ import { attributionFromCookies } from '@/lib/attribution';
 type Buyer = {
   firstName: string; lastName: string; email: string; repeatEmail: string;
   address: string; zipcode: string; city: string; country: string; gender: string;
-  birthday: string; phoneCode: string; phone: string; over21: boolean; terms: boolean;
+  birthday: string; phoneCode: string; phone: string; over21: boolean; terms: boolean; agencyCode: string;
 };
 
 class CheckoutError extends Error {}
 
 function text(v: unknown, max = 100): string {
   return typeof v === 'string' ? v.trim().slice(0, max) : '';
+}
+
+// the optional agency (seller) code: letters, digits, space, - _ . only, upper case, up to 50
+function agencyCode(v: unknown): string {
+  return text(v, 50).replace(/[^A-Za-z0-9 _.\-]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
 function validBirthday(s: string): boolean {
@@ -38,7 +43,8 @@ function readBuyer(raw: Record<string, unknown>): Buyer {
     address: text(raw.address, 200), zipcode: text(raw.zipcode, 20), city: text(raw.city),
     country: text(raw.country, 2), gender: text(raw.gender, 10), birthday: text(raw.birthday, 10),
     phoneCode: text(raw.phoneCode, 2), phone: text(raw.phone, 20).replace(/[\s\-()]/g, ''),
-    over21: raw.over21 === true, terms: raw.terms === true
+    over21: raw.over21 === true, terms: raw.terms === true,
+    agencyCode: agencyCode(raw.agencyCode)
   };
 
   if (!b.firstName || !b.lastName || !b.address || !b.zipcode || !b.city) throw new CheckoutError('Please fill in all fields.');
@@ -101,6 +107,7 @@ export async function POST(request: Request) {
     // left out when empty
     if (buyer.gender) form.gender = buyer.gender;
     if (buyer.birthday) form.age = buyer.birthday;
+    if (buyer.agencyCode) form.agencyCode = buyer.agencyCode;
     // the ad campaign the buyer came from, if any (proxy.ts keeps it in a cookie)
     const campaign = attributionFromCookies(request.headers.get('cookie'));
     if (campaign) form.attribution = JSON.stringify(campaign);

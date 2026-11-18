@@ -90,7 +90,7 @@ export async function soldOut(ticketId: string) {
   return { left_tickets: left(p, await taken(db, e.id)) };
 }
 
-function readOrder(body: Record<string, string>): { buyer: Buyer; items: OrderItemRow[]; attribution: Attribution | null } {
+function readOrder(body: Record<string, string>): { buyer: Buyer; items: OrderItemRow[]; attribution: Attribution | null; agencyCode: string | null } {
   const code = text(body.countryPhoneCode, 6).replace(/[^\d]/g, '');
   const phone = text(body.phoneNumber, 20).replace(/[^\d]/g, '');
   const buyer: Buyer = {
@@ -123,7 +123,9 @@ function readOrder(body: Record<string, string>): { buyer: Buyer; items: OrderIt
     items.push({ productId: p.id, name: p.name, price: p.price, quantity, tier: p.tier, codes: p.codes });
   });
   if (!items.length) throw new BuyerError('Your order is empty.');
-  return { buyer, items, attribution: readAttribution(body.attribution) };
+  // the agency (seller) code the buyer entered, checked again; null when none
+  const agency = text(body.agencyCode, 50).replace(/[^A-Za-z0-9 _.\-]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+  return { buyer, items, attribution: readAttribution(body.attribution), agencyCode: agency || null };
 }
 
 // the ad campaign of the order (lib/attribution.ts), checked again; null when none
@@ -178,9 +180,9 @@ export async function buyTickets(body: Record<string, string>) {
       });
       const r = newRef();
       await c.query(
-        'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, attribution) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+        'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, attribution, agency_code) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
         [r, e.id, order.buyer.email, order.buyer.ip, JSON.stringify(order.buyer), JSON.stringify(order.items), amount.toFixed(2), config.currency,
-          order.attribution ? JSON.stringify(order.attribution) : null]
+          order.attribution ? JSON.stringify(order.attribution) : null, order.agencyCode]
       );
       return r;
     });
@@ -489,10 +491,10 @@ export async function retryUrl(ref: string): Promise<string | null> {
     if (items.some(function (i) { return left(product(i.productId)!, t) < i.quantity; })) return null;
     const r = newRef();
     await c.query(
-      'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, retry_of, attribution) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-      // a retry keeps the ad campaign of the order it repeats
+      'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, retry_of, attribution, agency_code) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+      // a retry keeps the ad campaign and the agency code of the order it repeats
       [r, o.event_id, o.email, o.ip, JSON.stringify(o.buyer), JSON.stringify(items), amount.toFixed(2), config.currency, o.retry_of || o.ref,
-        o.attribution == null ? null : (typeof o.attribution === 'string' ? o.attribution : JSON.stringify(o.attribution))]
+        o.attribution == null ? null : (typeof o.attribution === 'string' ? o.attribution : JSON.stringify(o.attribution)), o.agency_code || null]
     );
     return r;
   });

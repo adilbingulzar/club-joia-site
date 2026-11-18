@@ -14,12 +14,12 @@ export type Buyer = {
   firstName: string; lastName: string; email: string; repeatEmail: string;
   address: string; zipcode: string; city: string; country: string; gender: string;
   day: string; month: string; year: string; phoneCode: string; phone: string;
-  over21: boolean; terms: boolean;
+  over21: boolean; terms: boolean; agencyCode: string;
 };
 
 export const EMPTY_BUYER: Buyer = {
   firstName: '', lastName: '', email: '', repeatEmail: '', address: '', zipcode: '', city: '',
-  country: '', gender: '', day: '', month: '', year: '', phoneCode: '', phone: '', over21: false, terms: false
+  country: '', gender: '', day: '', month: '', year: '', phoneCode: '', phone: '', over21: false, terms: false, agencyCode: ''
 };
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -203,7 +203,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
           firstName: buyer.firstName, lastName: buyer.lastName, email: buyer.email, repeatEmail: buyer.repeatEmail,
           address: buyer.address, zipcode: buyer.zipcode, city: buyer.city, country: buyer.country,
           gender: buyer.gender, birthday: dob, phoneCode: buyer.phoneCode, phone: buyer.phone,
-          over21: buyer.over21, terms: buyer.terms
+          over21: buyer.over21, terms: buyer.terms, agencyCode: buyer.agencyCode
         },
         successUrl: pageUrl('/thank-you'),
         cancelUrl: pageUrl('/summary')
@@ -307,6 +307,12 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
               </div>
               {errorText('phone')}
             </fieldset>
+
+            {/* the agency or seller who sold the tickets, saved with the order */}
+            <label className="wide">Agency code (optional)
+              <input id="agencyCode" name="agencyCode" value={buyer.agencyCode} maxLength={50} autoComplete="off"
+                onChange={function (e) { set('agencyCode', e.target.value); }} />
+            </label>
           </div>
 
           <label className="check">

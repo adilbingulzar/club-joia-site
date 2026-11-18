@@ -39,6 +39,16 @@ describe('checkout', function () {
     expect(shop.sent('buyTickets')!.get('attribution')).toBeNull();
   });
 
+  it('sends the agency code, cleaned and in upper case, and none when it is left empty', async function () {
+    let shop = shopMock();
+    await checkout({ agencyCode: '  abc-12 <x>  ' });
+    expect(shop.sent('buyTickets')!.get('agencyCode')).toBe('ABC-12 X');
+    vi.unstubAllGlobals();
+    shop = shopMock();
+    await checkout({ agencyCode: '   ' });
+    expect(shop.sent('buyTickets')!.get('agencyCode')).toBeNull();
+  });
+
   it('books the order in the shop, makes its payment and returns the site\'s payment page', async function () {
     const shop = shopMock();
     const res = await checkout();
