@@ -366,6 +366,10 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     await toBank(ref3b);
     answers[ref3b] = { status: 'PAID' };
     expect((await get(back(ref3b))).location).toBe(SITE + '/thank-you?orderid=' + ref3b);
+    // the thank-you page's purchase event: only for the paid order, not the declined one
+    const { paidOrder } = await import('@/lib/shop/orders');
+    expect(await paidOrder(ref3b)).toEqual({ ref: ref3b, value: 4000, currency: expect.any(String), items: 1 });
+    expect(await paidOrder(ref3)).toBeNull();
     expect((await get(retryLink)).location).toBe(SITE + '/thank-you?orderid=' + ref3b);
   });
 

@@ -137,6 +137,12 @@ IP_ALLOWLIST="127.0.0.1, ::1"               # optional: only these addresses/ran
 MAINTENANCE_MODE=true                       # optional: visitors get the pre-registration page (below); the ticket shop's routes stay open; restart to apply
 MAINTENANCE_KEY=long-random-text            # optional: developers open the site once with ?dev=<this key> during maintenance
 
+# ad platform tags (lib/tracking.ts), every page but the payment page; empty = off, nothing loaded
+META_PIXEL_ID=                              # Meta Pixel id (digits): page visits, and "Lead" on a pre-registration
+LINKEDIN_PARTNER_ID=                        # LinkedIn Insight Tag partner id (digits): page visits
+LINKEDIN_LEAD_CONVERSION_ID=                # optional: the LinkedIn conversion a pre-registration counts as
+LINKEDIN_PURCHASE_CONVERSION_ID=            # optional: the LinkedIn conversion a paid order counts as (Meta gets "Purchase" either way)
+
 # the database: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME (above)
 SHOP_EVENT=abu-dhabi-2026                   # the event on sale, by its slug (members app: Admin > Events)
 SHOP_CURRENCY=AED

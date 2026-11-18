@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { getCatalog } from '@/lib/catalog';
 import { CatalogProvider } from '@/lib/prices';
+import Tracking from '@/components/Tracking';
 
 // Prices come from Alfred (lib/catalog), so pages are rendered per request, not at build time.
 // The catalogue is handed over unresolved, the page doesn't wait for it.
@@ -19,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     // data-scroll-behavior lets Next.js turn off the smooth scrolling from globals.css during page changes.
     <html lang="en" data-scroll-behavior="smooth">
-      <body><CatalogProvider catalog={catalog}>{children}</CatalogProvider></body>
+      <body><CatalogProvider catalog={catalog}>{children}</CatalogProvider><Tracking /></body>
     </html>
   );
 }

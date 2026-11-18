@@ -103,6 +103,8 @@
         thanks.hidden = false;
         thanks.focus();
         thanks.scrollIntoView({ behavior: "smooth", block: "center" });
+        // a conversion for the ad platforms (/tracking.js), when their tags are on
+        if (window.cjTrackLead) window.cjTrackLead();
         return;
       }
       if (data.fields) for (const [n, t] of Object.entries(data.fields)) if (form.elements[n]) setError(n, t);

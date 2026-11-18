@@ -2,12 +2,16 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PageHeader, Footer } from '@/components/SiteNav';
 import ClearCart from '@/components/ClearCart';
+import TrackPurchase from '@/components/TrackPurchase';
+import { paidOrder } from '@/lib/shop/orders';
 
 export const metadata: Metadata = { title: 'Thank You | Club JOIA 300', robots: { index: false } };
 
 // Alfred sends the buyer here after payment as /thank-you?orderid=<transaction id>.
 export default async function ThankYouPage({ searchParams }: { searchParams: Promise<{ orderid?: string | string[] }> }) {
   const orderId = String((await searchParams).orderid || '').replace(/[^\w-]/g, '').slice(0, 64);
+  // the ad platforms count a purchase only for an order that is really paid
+  const paid = orderId ? await paidOrder(orderId).catch(function () { return null; }) : null;
 
   return (
     <>
@@ -25,6 +29,7 @@ export default async function ThankYouPage({ searchParams }: { searchParams: Pro
 
       <Footer />
       <ClearCart />
+      {paid && <TrackPurchase purchase={paid} />}
     </>
   );
 }

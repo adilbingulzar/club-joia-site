@@ -205,6 +205,14 @@ function noPaymentPage(ref: string): string {
   return config.publicUrl + '/shop/ticketing_error?orderid=' + encodeURIComponent(ref);
 }
 
+/** A paid order, for the ad platforms' purchase event on the thank-you page (lib/tracking.ts); null otherwise. */
+export async function paidOrder(ref: string): Promise<{ ref: string; value: number; currency: string; items: number } | null> {
+  const o = (await db.query("SELECT ref, amount, currency, items FROM shop.orders WHERE ref = $1 AND status = 'paid'", [ref.slice(0, 64)])).rows[0];
+  if (!o) return null;
+  const items = (typeof o.items === 'string' ? JSON.parse(o.items) : o.items) as OrderItemRow[];
+  return { ref: String(o.ref), value: Number(o.amount), currency: String(o.currency), items: items.reduce(function (s, i) { return s + Number(i.quantity || 0); }, 0) };
+}
+
 // the site's page after payment
 export function sitePage(status: string, ref: string): string {
   const page = status === 'paid' ? '/thank-you' : '/payment/' + status;
