@@ -148,6 +148,11 @@ function order(lines: [string, number][], to = email) {
   return api('buyTickets', form);
 }
 
+// a JSON column as mysql2 gives it back (parsed, or text)
+function json(v: unknown): unknown {
+  return typeof v === 'string' ? JSON.parse(v) : v;
+}
+
 function refOf(paymentUrl: string): string {
   return decodeURIComponent(paymentUrl.split('/shop/pay/')[1]);
 }
@@ -337,8 +342,11 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
   });
 
   it('declined: one email with a retry link, which starts a new order', async function () {
-    const o3 = await order([['ruby-red/fri-sat', 1]]);
+    // this buyer came from an ad (app/api/checkout passes the cookie's campaign): saved with the order
+    const campaign = { utm_source: 'facebook', utm_campaign: 'gp-2026', fbclid: 'IwAR0abc', landing: '/', at: '2026-11-18T10:00:00.000Z' };
+    const o3 = await api('buyTickets', buyer({ 'tickets[0][ticketId]': 'ruby-red/fri-sat', 'tickets[0][quantity]': '1', attribution: JSON.stringify({ ...campaign, junk: 'x' }) }));
     ref3 = refOf(o3.body.paymentUrl);
+    expect(json((await one('SELECT attribution FROM shop.orders WHERE ref = $1', [ref3]))!.attribution)).toEqual(campaign);
     await toBank(ref3);
     answers[ref3] = { status: 'DECLINED' };
     expect((await get(back(ref3))).location).toBe(SITE + '/payment/denied?orderid=' + ref3);
@@ -352,6 +360,8 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect(again.status).toBe(302);
     ref3b = decodeURIComponent(String(again.location).split('/shop/pay/')[1] || '');
     expect(await one('SELECT retry_of, amount, status FROM shop.orders WHERE ref = $1', [ref3b])).toEqual({ retry_of: ref3, amount: '4000.00', status: 'pending' });
+    // the retry keeps the ad campaign
+    expect(json((await one('SELECT attribution FROM shop.orders WHERE ref = $1', [ref3b]))!.attribution)).toEqual(campaign);
     expect((await get(String(again.location))).location).toBe(SITE + '/pay/' + ref3b);
     await toBank(ref3b);
     answers[ref3b] = { status: 'PAID' };

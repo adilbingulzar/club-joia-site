@@ -135,6 +135,7 @@ async function migrate(): Promise<void> {
       tickets          JSON NULL,                       -- the ticket numbers made
       error            TEXT NULL,
       retry_of         VARCHAR(64) NULL,                -- the order a retry came from
+      attribution      JSON NULL,                       -- the ad campaign the buyer came from (lib/attribution.ts)
       created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       updated_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       paid_at          DATETIME(3) NULL,
@@ -220,6 +221,10 @@ async function migrate(): Promise<void> {
       ADD COLUMN pay_check JSON NULL AFTER pay_create,
       ADD KEY orders_sweep (status, pay_checkout_at)`);
   }
+  // orders tables made before ad campaigns were saved
+  const campaignCol = await run(pool(),
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'shop_orders' AND column_name = 'attribution' LIMIT 1");
+  if (!campaignCol.rows.length) await run(pool(), 'ALTER TABLE shop.orders ADD COLUMN attribution JSON NULL AFTER retry_of');
   // tables made before one row per submission: email was unique there
   const unique = await run(pool(),
     "SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'pre_registrations' AND index_name = 'registrations_email' AND non_unique = 0 LIMIT 1");

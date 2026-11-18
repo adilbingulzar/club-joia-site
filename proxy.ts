@@ -12,11 +12,15 @@
  * Developers: with MAINTENANCE_KEY set, one visit to ?dev=<MAINTENANCE_KEY> opens the site for
  * that browser. That visit stores a cookie and drops the parameter from the address; /clear deletes
  * the cookie again (back to the pre-registration page).
+ *
+ * Ad campaigns (lib/attribution.ts): a page visit whose address has utm_* tags or an ad click id
+ * stores them in a cookie for 30 days, saved with the visitor's order at checkout.
  */
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { allowlistVerdict } from '@/lib/ip-allowlist';
 import { contentSecurityPolicy, newNonce } from '@/lib/csp';
+import { ATTRIBUTION_COOKIE, ATTRIBUTION_MAX_AGE, encodeAttribution, fromVisit } from '@/lib/attribution';
 
 const PARAM = 'dev';
 const COOKIE = 'cj300-dev';
@@ -41,7 +45,20 @@ export function proxy(request: NextRequest) {
   headers.set('Content-Security-Policy', policy);
   const res = answer(request, { request: { headers } });
   res.headers.set('Content-Security-Policy', policy);
+  if (res.status !== 403) rememberCampaign(request, res);
   return res;
+}
+
+// a page visit from an ad: its tags in a cookie (lib/attribution.ts); files, APIs and the shop's
+// own addresses are skipped
+function rememberCampaign(request: NextRequest, res: NextResponse): void {
+  const path = request.nextUrl.pathname;
+  if (request.method !== 'GET' || /\.[a-z0-9]+$/i.test(path) || /^\/(_next|api|Api|shop|assets)\//.test(path)) return;
+  const a = fromVisit(request.nextUrl, request.headers.get('referer'));
+  if (!a) return;
+  res.cookies.set(ATTRIBUTION_COOKIE, encodeAttribution(a), {
+    httpOnly: true, secure: request.nextUrl.protocol === 'https:', sameSite: 'lax', path: '/', maxAge: ATTRIBUTION_MAX_AGE
+  });
 }
 
 // what the request gets; pass = the request headers with the nonce, for the page that renders

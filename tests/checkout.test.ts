@@ -9,13 +9,13 @@ const BUYER = {
 };
 
 // app/api/checkout uses lib/catalog, which keeps its answer: a fresh copy for every test
-async function checkout(buyer: Record<string, unknown> = {}, items: unknown[] = [{ id: 'ruby-red/fri-sat', quantity: 2 }]) {
+async function checkout(buyer: Record<string, unknown> = {}, items: unknown[] = [{ id: 'ruby-red/fri-sat', quantity: 2 }], cookie = '') {
   vi.resetModules();
   const { POST } = await import('@/app/api/checkout/route');
   const res = await POST(new Request('http://site.test/api/checkout', {
     method: 'POST',
     // a made-up first entry from the buyer, then the address nginx added: only nginx's counts
-    headers: { 'X-Forwarded-For': '10.0.0.1, 203.0.113.7' },
+    headers: { 'X-Forwarded-For': '10.0.0.1, 203.0.113.7', ...(cookie ? { Cookie: cookie } : {}) },
     body: JSON.stringify({ items, buyer: { ...BUYER, ...buyer } })
   }));
   return { status: res.status, body: await res.json() };
@@ -25,6 +25,20 @@ beforeEach(function () { vi.spyOn(console, 'error').mockImplementation(function 
 afterEach(function () { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('checkout', function () {
+  it('sends the ad campaign of the campaign cookie with the order', async function () {
+    const shop = shopMock();
+    const campaign = { utm_source: 'facebook', utm_campaign: 'gp-2026', fbclid: 'IwAR0abc', landing: '/', at: '2026-11-18T10:00:00.000Z' };
+    const res = await checkout({}, undefined, 'cj300-src=' + Buffer.from(JSON.stringify(campaign)).toString('base64url'));
+    expect(res.status).toBe(200);
+    expect(JSON.parse(shop.sent('buyTickets')!.get('attribution')!)).toEqual(campaign);
+  });
+
+  it('sends no campaign without the cookie or with a broken one', async function () {
+    const shop = shopMock();
+    await checkout({}, undefined, 'cj300-src=broken');
+    expect(shop.sent('buyTickets')!.get('attribution')).toBeNull();
+  });
+
   it('books the order in the shop, makes its payment and returns the site\'s payment page', async function () {
     const shop = shopMock();
     const res = await checkout();

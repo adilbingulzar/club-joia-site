@@ -115,6 +115,26 @@ describe('maintenance', function () {
     expect(visit('/').headers.get('x-middleware-rewrite')).toBe('https://club.example.com/preregister/index.html');
   });
 
+  it('remembers the ad campaign of a page visit for 30 days, also on the pre-registration page', function () {
+    for (const mode of ['true', 'false']) {
+      vi.stubEnv('MAINTENANCE_MODE', mode);
+      const cookie = visit('/?utm_source=facebook&fbclid=IwAR0abc').headers.get('set-cookie') || '';
+      expect(cookie).toMatch(/^cj300-src=[A-Za-z0-9_-]+;/);
+      expect(cookie).toMatch(/Max-Age=2592000/i);
+      expect(cookie).toMatch(/HttpOnly/i);
+      expect(cookie).toMatch(/Secure/i);
+      expect(cookie).toMatch(/SameSite=lax/i);
+    }
+  });
+
+  it('stores nothing for a visit without tags, or for files and APIs', function () {
+    vi.stubEnv('MAINTENANCE_MODE', 'false');
+    expect(visit('/tickets').headers.get('set-cookie')).toBeNull();
+    expect(visit('/assets/img/logo.png?utm_source=x').headers.get('set-cookie')).toBeNull();
+    expect(visit('/api/checkout?utm_source=x').headers.get('set-cookie')).toBeNull();
+    expect(visit('/shop/pay/CJ1?utm_source=x').headers.get('set-cookie')).toBeNull();
+  });
+
   it('keeps the page for a wrong key or cookie', function () {
     vi.stubEnv('MAINTENANCE_MODE', 'true');
     vi.stubEnv('MAINTENANCE_KEY', 'secret');
