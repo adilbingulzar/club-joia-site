@@ -214,9 +214,12 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect(events[0].StartDate).toBe(dates.s);
 
     const types = (await api('buyTicketsTicketTypes', { eventId: EVENT, ticketType: '0' })).body;
-    expect(types).toHaveLength(12);
+    // 3 days, Saturday and Sunday on sale; the old two-day packages listed off sale
+    expect(types).toHaveLength(18);
+    expect(types.filter(function (t: { ticketVisible: string }) { return t.ticketVisible === '1'; }).map(function (t: { id: string }) { return t.id; }).sort())
+      .toEqual(['pearly-white/3-days', 'pearly-white/sat', 'pearly-white/sun', 'ruby-red/3-days', 'ruby-red/sat', 'ruby-red/sun', 'ultra-black/3-days', 'ultra-black/sat', 'ultra-black/sun']);
     expect(types.find(function (t: { ticketDescription: string }) { return t.ticketDescription === 'Ruby Red, 3 days'; }))
-      .toMatchObject({ id: 'ruby-red/3-days', ticketPrice: '8000.00', softDelete: '0', ticketVisible: '1' });
+      .toMatchObject({ id: 'ruby-red/3-days', ticketPrice: '7000.00', softDelete: '0', ticketVisible: '1' });
     expect((await api('buyTicketsTicketTypes', { eventId: 'nope' })).body).toEqual([]);
     expect((await api('buyTicketsSoldOut', { ticketId: 'ruby-red/3-days' })).body.left_tickets).toBeGreaterThan(0);
     expect((await api('nope', {})).status).toBe(404);
@@ -235,11 +238,11 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
   });
 
   it('order 1: new buyer pays, becomes a member with the tickets', async function () {
-    const o1 = await order([['ruby-red/3-days', 2], ['pearly-white/fri-sat', 1]]);
+    const o1 = await order([['ruby-red/3-days', 2], ['pearly-white/sat', 1]]);
     expect(o1.body.status).toBe('1');
     expect(o1.body.paymentUrl).toMatch(/^http:\/\/site\.test\/shop\/pay\//);
     ref1 = refOf(o1.body.paymentUrl);
-    expect(await one('SELECT amount, currency, status FROM shop.orders WHERE ref = $1', [ref1])).toEqual({ amount: '21000.00', currency: 'USD', status: 'pending' });
+    expect(await one('SELECT amount, currency, status FROM shop.orders WHERE ref = $1', [ref1])).toEqual({ amount: '18500.00', currency: 'USD', status: 'pending' });
 
     // the payment link: the site's payment page
     const pay = await get(o1.body.paymentUrl);
@@ -247,11 +250,11 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
 
     // the page makes the IFZA payment once, with the billing address and our amount
     const ready = await payState(ref1);
-    expect(ready).toMatchObject({ state: 'ready', ref: ref1, amount: 21000, currency: 'USD', init: { store_id: 12345, currency: 'USD', test_mode: 1 } });
+    expect(ready).toMatchObject({ state: 'ready', ref: ref1, amount: 18500, currency: 'USD', init: { store_id: 12345, currency: 'USD', test_mode: 1 } });
     expect((await payState(ref1))!.state).toBe('ready');
     expect(creates).toBe(1);
     const p1 = Object.values(payments).find(function (x) { return x.reference === ref1; })!;
-    expect(p1).toMatchObject({ amount: 21000, currency: 'USD' });
+    expect(p1).toMatchObject({ amount: 18500, currency: 'USD' });
     expect(p1.customer).toMatchObject({ address1: 'Street 1', city: 'Lahore', country: 'PK', firstName: 'Shop', lastName: 'Tester', phone: '+923001234567' });
     const row = await one('SELECT pay_id, pay_status, pay_expires_at > UTC_TIMESTAMP(3) AS open FROM shop.orders WHERE ref = $1', [ref1]);
     expect(row).toMatchObject({ pay_id: p1.id, pay_status: 'CREATED', open: 1 });
@@ -274,12 +277,12 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     const done = await one('SELECT * FROM shop.orders WHERE ref = $1', [ref1]);
     expect(done).toMatchObject({ status: 'paid', error: null });
     expect(done.fulfilled_at).toBeTruthy();
-    expect(done.tickets).toHaveLength(10);
+    expect(done.tickets).toHaveLength(9);
 
     // every IFZA call is in the payment logs, with IFZA's answer; the card token never is
     const logs = (await pool.query('SELECT call_name, reference, payment_id, http_status, request, response FROM shop.payment_logs WHERE reference = $1 OR payment_id = $2 ORDER BY id', [ref1, p1.id])).rows;
     expect(logs[0]).toMatchObject({ call_name: 'create', reference: ref1, payment_id: p1.id, http_status: 200 });
-    expect(logs[0].request).toMatchObject({ reference: ref1, amount: 21000, currency: 'USD', customer: { country: 'PK' } });
+    expect(logs[0].request).toMatchObject({ reference: ref1, amount: 18500, currency: 'USD', customer: { country: 'PK' } });
     expect(JSON.parse(logs[0].response)).toMatchObject({ ok: true, payment_id: p1.id });
     const checkouts = logs.filter(function (l) { return l.call_name === 'checkout'; });
     expect(checkouts.length).toBeGreaterThan(0);
@@ -300,22 +303,22 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect(ms[0]).toMatchObject({ slug: 'pearly-white', status: 'INVITED', membership_number: member.membership_number });
 
     const tickets = (await pool.query('SELECT t.ticket_number, t.valid_from = tt.valid_from AS same_from, t.metadata FROM tickets t JOIN ticket_types tt ON tt.id = t.ticket_type_id WHERE t.member_id = $1', [member.id])).rows;
-    expect(tickets).toHaveLength(10);
+    expect(tickets).toHaveLength(9);
     tickets.forEach(function (t) {
       expect(Boolean(t.same_from)).toBe(true);
       expect(t.metadata.order).toBe(ref1);
       expect(t.ticket_number).toMatch(/^[A-Z0-9]+-[A-Z]+-[23456789A-HJ-NP-Z]{6}$/);
     });
-    expect((await one('SELECT COUNT(*) AS n FROM ticket_credentials c JOIN tickets t ON t.id = c.ticket_id WHERE t.member_id = $1 AND c.revoked_at IS NULL', [member.id])).n).toBe(10);
+    expect((await one('SELECT COUNT(*) AS n FROM ticket_credentials c JOIN tickets t ON t.id = c.ticket_id WHERE t.member_id = $1 AND c.revoked_at IS NULL', [member.id])).n).toBe(9);
 
     // a second return (or the sweep) makes nothing twice
     expect((await get(back(ref1))).location).toBe(SITE + '/thank-you?orderid=' + ref1);
-    expect((await one('SELECT COUNT(*) AS n FROM tickets WHERE member_id = $1', [member.id])).n).toBe(10);
+    expect((await one('SELECT COUNT(*) AS n FROM tickets WHERE member_id = $1', [member.id])).n).toBe(9);
     expect((await card(ref1)).body).toEqual({ page: SITE + '/thank-you?orderid=' + ref1 });
 
     const log = mails.join('\n');
     expect(log).toContain('Subject: Your payment is confirmed – Club JOIA 300');
-    expect(log).toContain('Arrangement / Ticket: 2 × Ruby Red, 3 days; 1 × Pearly White, Friday & Saturday');
+    expect(log).toContain('Arrangement / Ticket: 2 × Ruby Red, 3 days; 1 × Pearly White, Saturday');
     expect(log).toContain('please call us on +971 50 000 0000');
     // only the two designed emails: no tickets / activation email
     expect(log).not.toContain('Your Club JOIA 300 tickets');
@@ -323,7 +326,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
   });
 
   it('order 2: the same member is upgraded', async function () {
-    const o2 = await order([['ultra-black/fri-sun', 1]]);
+    const o2 = await order([['ultra-black/sun', 1]]);
     ref2 = refOf(o2.body.paymentUrl);
     await toBank(ref2);
     // the buyer pays and closes the page: the sweep finds it (orders untouched for 2 minutes)
@@ -337,14 +340,14 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     const ms = (await pool.query('SELECT t.slug FROM memberships m JOIN membership_tiers t ON t.id = m.tier_id WHERE member_id = $1', [memberId])).rows;
     expect(ms).toEqual([{ slug: 'ultra-black' }]);
     const t2 = (await one('SELECT tickets FROM shop.orders WHERE ref = $1', [ref2])).tickets as string[];
-    expect(t2).toHaveLength(4);
+    expect(t2).toHaveLength(3);
     expect(t2.some(function (n) { return /-PARK-/.test(n); })).toBe(true);
   });
 
   it('declined: one email with a retry link, which starts a new order', async function () {
     // this buyer came from an ad (app/api/checkout passes the cookie's campaign): saved with the order
     const campaign = { utm_source: 'facebook', utm_campaign: 'gp-2026', fbclid: 'IwAR0abc', landing: '/', at: '2026-11-18T10:00:00.000Z' };
-    const o3 = await api('buyTickets', buyer({ 'tickets[0][ticketId]': 'ruby-red/fri-sat', 'tickets[0][quantity]': '1', attribution: JSON.stringify({ ...campaign, junk: 'x' }), agencyCode: 'agency 7;' }));
+    const o3 = await api('buyTickets', buyer({ 'tickets[0][ticketId]': 'ruby-red/sat', 'tickets[0][quantity]': '1', attribution: JSON.stringify({ ...campaign, junk: 'x' }), agencyCode: 'agency 7;' }));
     ref3 = refOf(o3.body.paymentUrl);
     expect(json((await one('SELECT attribution FROM shop.orders WHERE ref = $1', [ref3]))!.attribution)).toEqual(campaign);
     expect((await one('SELECT agency_code FROM shop.orders WHERE ref = $1', [ref3]))!.agency_code).toBe('AGENCY 7');
@@ -360,7 +363,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     const again = await get(retryLink);
     expect(again.status).toBe(302);
     ref3b = decodeURIComponent(String(again.location).split('/shop/pay/')[1] || '');
-    expect(await one('SELECT retry_of, amount, status FROM shop.orders WHERE ref = $1', [ref3b])).toEqual({ retry_of: ref3, amount: '4000.00', status: 'pending' });
+    expect(await one('SELECT retry_of, amount, status FROM shop.orders WHERE ref = $1', [ref3b])).toEqual({ retry_of: ref3, amount: '3000.00', status: 'pending' });
     // the retry keeps the ad campaign
     expect(json((await one('SELECT attribution FROM shop.orders WHERE ref = $1', [ref3b]))!.attribution)).toEqual(campaign);
     expect((await one('SELECT agency_code FROM shop.orders WHERE ref = $1', [ref3b]))!.agency_code).toBe('AGENCY 7');
@@ -370,13 +373,13 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect((await get(back(ref3b))).location).toBe(SITE + '/thank-you?orderid=' + ref3b);
     // the thank-you page's purchase event: only for the paid order, not the declined one
     const { paidOrder } = await import('@/lib/shop/orders');
-    expect(await paidOrder(ref3b)).toEqual({ ref: ref3b, value: 4000, currency: expect.any(String), items: 1 });
+    expect(await paidOrder(ref3b)).toEqual({ ref: ref3b, value: 3000, currency: expect.any(String), items: 1 });
     expect(await paidOrder(ref3)).toBeNull();
     expect((await get(retryLink)).location).toBe(SITE + '/thank-you?orderid=' + ref3b);
   });
 
   it('cancelled: the payment link doesn\'t open the card form again', async function () {
-    const o4 = await order([['ruby-red/fri-sat', 1]]);
+    const o4 = await order([['ruby-red/sat', 1]]);
     ref4 = refOf(o4.body.paymentUrl);
     await toBank(ref4);
     answers[ref4] = { status: 'CANCELLED' };
@@ -403,7 +406,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
   });
 
   it('a card the gateway refuses: declined at once, with the retry email', async function () {
-    const o = await order([['ruby-red/fri-sat', 1]], 'shoptest+refused-' + Date.now() + '@example.com');
+    const o = await order([['ruby-red/sat', 1]], 'shoptest+refused-' + Date.now() + '@example.com');
     const ref = refOf(o.body.paymentUrl);
     expect((await payState(ref))!.state).toBe('ready');
     expect((await card(ref, 'refused')).body).toEqual({ page: SITE + '/payment/denied?orderid=' + ref });
@@ -413,14 +416,14 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
 
   it('an order whose half hour is over: no payment, start again', async function () {
     const late = 'shoptest+late-' + Date.now() + '@example.com';
-    const o = await order([['ruby-red/fri-sat', 1]], late);
+    const o = await order([['ruby-red/sat', 1]], late);
     const ref = refOf(o.body.paymentUrl);
     await pool.query('UPDATE shop.orders SET created_at = created_at - INTERVAL 31 MINUTE WHERE ref = $1', [ref]);
     const before = creates;
     expect(await payState(ref)).toEqual({ state: 'expired', ref });
     expect(creates).toBe(before);
     // a payment made in time but now past IFZA's expiry
-    const o2 = await order([['ruby-red/fri-sat', 1]], late);
+    const o2 = await order([['ruby-red/sat', 1]], late);
     const ref2b = refOf(o2.body.paymentUrl);
     expect((await payState(ref2b))!.state).toBe('ready');
     await pool.query('UPDATE shop.orders SET pay_expires_at = UTC_TIMESTAMP(3) - INTERVAL 1 MINUTE WHERE ref = $1', [ref2b]);
@@ -432,7 +435,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     const stamp = Date.now();
     const mail = function (n: number | string) { return 'shoptest+limit' + n + '-' + stamp + '@example.com'; };
     const place = async function (to: string, ip: string) {
-      return (await api('buyTickets', Object.assign(buyer({ email: to }), { 'tickets[0][ticketId]': 'ruby-red/fri-sat', 'tickets[0][quantity]': '1', ip }))).body;
+      return (await api('buyTickets', Object.assign(buyer({ email: to }), { 'tickets[0][ticketId]': 'ruby-red/sat', 'tickets[0][quantity]': '1', ip }))).body;
     };
     const refused = { status: '0', message: 'You have several unfinished orders. Please complete one of them or try again in an hour.' };
 

@@ -5,8 +5,15 @@ import Countdown from '@/components/Countdown';
 import Slideshow from '@/components/Slideshow';
 import { CJ_CONFIG as cfg } from '@/lib/config';
 import Price from '@/components/Price';
+import GalleryVideo from '@/components/GalleryVideo';
 
 export const metadata: Metadata = { title: 'Club JOIA 300 | Abu Dhabi Grand Prix, December 4, 5 & 6' };
+
+// Previous editions: a highlights film and four photos a year (public/assets/gallery/<year>/)
+const GALLERY: { year: string; photos: string[] }[] = [
+  { year: '2025', photos: ['Two guests with champagne on deck at sunset, Yas Marina Circuit behind them', 'Canapés served in coupe glasses', 'Guests boarding the yacht along the lit gangway at night', 'Guests watching a Formula One car pass on track at sunset'] },
+  { year: '2024', photos: ['Chef finishing seared salmon skewers', 'A guest dancing on board at night', 'DJ performing on deck at night', 'Guests dancing with champagne at the after-party'] }
+];
 
 const tiers = cfg.tiers, all = tiers[tiers.length - 1].perks; // top tier holds every benefit
 
@@ -50,7 +57,7 @@ export default function Home() {
                   return <li key={t.id}><Link href={t.page}><i className={'sw ' + t.swatch}></i><b>{t.name}</b><span><Price tier={t.id} pkg="3-days" /></span></Link></li>;
                 })}
               </ul>
-              <p className="hero-note">Prices for 3-day access. Two-day packages also available.</p>
+              <p className="hero-note">Prices for 3-day access. Saturday and Sunday day access also available.</p>
               <div className="btns">
                 <Link className="btn" href="/tickets">Book your access</Link>
                 <span className="ltd">Limited availability</span>
@@ -81,24 +88,54 @@ export default function Home() {
           <div className="wrap about">
             <div>
               <h2>A yacht club on the water, a front-row seat to race weekend</h2>
-              <p>Club JOIA 300 brings luxury yacht access to the Abu Dhabi Grand Prix. Spend three evenings on deck as the cars race past, with the sunset over the marina and the energy of the weekend all around you.</p>
+              <p>Club JOIA 300 brings luxury yacht access to the Abu Dhabi Grand Prix. Spend race weekend aboard JOIA, a 65 m mega yacht at Yas Marina, from the afternoon sessions to the sunset over the marina and on into the night, with the cars passing just metres away.</p>
               <p>Expect a private, invite-style atmosphere: live sets from Black Coffee and Gordo, dining by Roberto’s and an easy, elegant crowd. Access is limited, so book early.</p>
+              <div className="about-photos">
+                <figure className="ap-main"><img src="/assets/img/yacht/side-aerial.webp" alt="JOIA, a 65 m mega yacht, at sea at sunset with its sundeck and jacuzzi deck in view" width="1672" height="941" loading="lazy" /><figcaption>JOIA, The Crown Jewel</figcaption></figure>
+                <figure><img src="/assets/img/yacht/lounge-deck.webp" alt="Open-air lounge deck with teak floors, sofas and a jacuzzi facing the sea" width="1672" height="941" loading="lazy" /><figcaption>Lounge deck</figcaption></figure>
+                <figure><img src="/assets/img/yacht/deck-bar.webp" alt="Deck bar with stools and a stainless steel staircase at sunset" width="1672" height="941" loading="lazy" /><figcaption>Deck bar</figcaption></figure>
+              </div>
             </div>
             <dl className="facts">
               <div><dt>Event</dt><dd>Abu Dhabi Grand Prix</dd></div>
               <div><dt>Dates</dt><dd>Friday December 4, Saturday December 5 and Sunday December 6</dd></div>
+              <div><dt>Yacht</dt><dd>JOIA, a 65 m mega yacht</dd></div>
               <div><dt>Venue</dt><dd>Yas Marina Circuit, Abu Dhabi</dd></div>
+              <div><dt>Hours</dt><dd>Friday 2pm to 10pm. Saturday and Sunday 2pm to 2am</dd></div>
               <div><dt>Music</dt><dd>Featuring Black Coffee and Gordo</dd></div>
               <div><dt>Dining</dt><dd>Catering by Roberto’s</dd></div>
-              <div><dt>Tickets</dt><dd>Limited. <Link href="/tickets">Book online</Link></dd></div>
+              <div><dt>Dress code</dt><dd>Smart elegant</dd></div>
+              <div><dt>Guests</dt><dd>300 each day, aged 21 and over</dd></div>
+              <div><dt>Tickets</dt><dd>Limited. Sales close December 3. <Link href="/tickets">Book online</Link></dd></div>
             </dl>
+          </div>
+        </section>
+
+        <section className="lineup" id="entertainment">
+          <div className="wrap">
+            <h2>Entertainment</h2>
+            <p className="lineup-lead">Three days of full DJ programming. Saturday and Sunday bring 12 hours of non-stop music, with headliners Gordo on Saturday, December 5 and Black Coffee on Sunday, December 6.</p>
+            <div className="artists-grid">
+              <article className="artist">
+                <figure><img src="/assets/img/artists/gordo.jpg" alt="Gordo in a black leather jacket and dark sunglasses" width="532" height="640" loading="lazy" /></figure>
+                <small>Saturday, December 5 &nbsp;|&nbsp; Headliner</small>
+                <h3>Gordo</h3>
+                <p>An internationally acclaimed DJ and Afro house icon takes centre stage at Club JOIA.</p>
+              </article>
+              <article className="artist">
+                <figure><img src="/assets/img/artists/black-coffee.jpg" alt="Black Coffee seated in a pinstripe suit and black-rimmed glasses" width="799" height="1200" loading="lazy" style={{ objectPosition: '50% 30%' }} /></figure>
+                <small>Sunday, December 6 &nbsp;|&nbsp; Headliner</small>
+                <h3>Black Coffee</h3>
+                <p>The Grammy-winning house music icon brings his signature sound to the 3rd year edition of JOIA.</p>
+              </article>
+            </div>
           </div>
         </section>
 
         <section className="band" id="access">
           <div className="wrap">
             <h2>Choose your access</h2>
-            <p style={{ color: 'var(--mute)', margin: 0, maxWidth: '60ch' }}>Three access levels, each available for all three days or as a two-day package.</p>
+            <p style={{ color: 'var(--mute)', margin: 0, maxWidth: '60ch' }}>Three access levels, each available for all three days or as a single Saturday or Sunday.</p>
             <div className="access-cards">
               {tiers.map(function (t) {
                 return <Link className="access-card" href={t.page} key={t.id}><img src={t.card} alt={t.name + ' membership card'} width="2000" height="1262" loading="lazy" /><b>{t.name}</b><small>{t.perks.length + ' benefits, 3 days '}<Price tier={t.id} pkg="3-days" /></small></Link>;
@@ -117,11 +154,111 @@ export default function Home() {
           </div>
         </section>
 
+        <section className="band" id="bar">
+          <div className="wrap about">
+            <div>
+              <h2>The bar</h2>
+              <p>Every guest enjoys an open bar throughout the event, from doors open to the last song, at every access level.</p>
+              <p>Pearly White and Ultra Black guests also enjoy our premium beverage selection, served on board all weekend.</p>
+              <figure className="bar-photo"><img src="/assets/img/yacht/bar-lounge.webp" alt="Guests sharing champagne on a yacht lounge deck at dusk, with the Yas Marina hotel lit up behind them" width="1672" height="941" loading="lazy" /><figcaption>Champagne on deck</figcaption></figure>
+            </div>
+            <dl className="facts">
+              <div><dt>Champagne</dt><dd>Moët &amp; Chandon, Dom Pérignon, Laurent-Perrier</dd></div>
+              <div><dt>Vodka</dt><dd>Belvedere, Grey Goose</dd></div>
+              <div><dt>Cognac</dt><dd>Hennessy VSOP and XO, Rémy Martin XO, Courvoisier</dd></div>
+              <div><dt>Whisky</dt><dd>Johnnie Walker Blue Label, The Macallan 18 Year Old</dd></div>
+            </dl>
+          </div>
+        </section>
+
+        <section id="gallery">
+          <div className="wrap">
+            <h2>Previous editions</h2>
+            <p style={{ color: 'var(--mute)', margin: 0, maxWidth: '60ch' }}>Club JOIA 300 returns for its third year. A look back at race weekend on the water in 2025 and 2024.</p>
+            {GALLERY.map(function (g) {
+              const dir = '/assets/gallery/' + g.year + '/';
+              return (
+                <div key={g.year}>
+                  <h3 className="gal-year">{g.year}</h3>
+                  <div className="gallery">
+                    <figure className="ph ph-video filled"><GalleryVideo src={dir + 'video.mp4'} poster={dir + 'poster.jpg'} label={g.year + ' highlights film'} /></figure>
+                    {g.photos.map(function (alt, i) {
+                      return <figure className="ph filled" key={i}><img src={dir + (i + 1) + '.jpg'} alt={alt} width="1000" height="1250" loading="lazy" /></figure>;
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="band" id="weekend">
+          <div className="wrap">
+            <h2>Race weekend on board</h2>
+            <p style={{ color: 'var(--mute)', margin: 0, maxWidth: '60ch' }}>Doors open at 2pm each day. Open bar, Roberto’s dining and DJ sets run alongside the action on track.</p>
+            <div className="trio">
+              <article><small>Friday, December 4 &nbsp;|&nbsp; 2pm to 10pm</small><h3>Practice day</h3><p>The first two practice sessions. A relaxed first day to settle in on deck.</p></article>
+              <article><small>Saturday, December 5 &nbsp;|&nbsp; 2pm to 2am</small><h3>Qualifying</h3><p>Final practice and the fight for pole, then after-race celebrations with a headline DJ until late.</p></article>
+              <article><small>Sunday, December 6 &nbsp;|&nbsp; 2pm to 2am</small><h3>Race day</h3><p>The season finale, watched from the water, followed by after-race celebrations with a headline DJ until late.</p></article>
+            </div>
+          </div>
+        </section>
+
+        <section id="arrival">
+          <div className="wrap arrival">
+            <div>
+              <h2>Arrival and entry</h2>
+              <p style={{ color: 'var(--mute)', margin: 0, maxWidth: '60ch' }}>Everything you need on the day sits on your phone.</p>
+              <ol className="steps">
+                <li><small>01</small><div><h3>Your ticket in the app</h3><p>After booking you are invited to the Club JOIA 300 app. Activate your ticket before the event: it is your accreditation to the yacht for the weekend, with the full schedule at a glance.</p></div></li>
+                <li><small>02</small><div><h3>Entry to Yas Marina</h3><p>Also download the official Abu Dhabi Grand Prix app, where you will find your QR code for entry to Yas Marina.</p></div></li>
+                <li><small>03</small><div><h3>Getting there</h3><p>Pearly White includes shared chauffeur transfers. Ultra Black includes a dedicated driver or VIP parking. Ruby Red guests make their own way to Yas Marina.</p></div></li>
+              </ol>
+            </div>
+            <figure className="phone-stage">
+              <div className="phone">
+                <div className="phone-screen">
+                  <div className="phone-status" aria-hidden="true"><span>9:41</span><i className="island"></i><span className="phone-icons"><b></b><b></b><b></b></span></div>
+                  <img src="/assets/img/app-home.jpg" alt="The Club JOIA 300 app home screen, showing a Pearly White membership card and shortcuts to ticket, programme, concierge and membership" width="780" height="1688" loading="lazy" />
+                </div>
+              </div>
+              <figcaption>The Club JOIA 300 app</figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section className="band" id="corporate">
+          <div className="wrap about">
+            <div>
+              <h2>Corporate and group hospitality</h2>
+              <p>Club JOIA 300 is made for companies hosting clients, thanking their most valued customers or building new relationships in a setting they will remember.</p>
+              <p>Corporate allocations are available for groups, for the full weekend, Saturday or Sunday, in any mix of access levels. Tell us your group size and dates and the team will put together a proposal.</p>
+              <div className="btns" style={{ marginTop: '28px' }}>
+                <a className="btn" href="mailto:access@clubjoia300.com?subject=Corporate%20allocation%20enquiry">Enquire about groups</a>
+              </div>
+            </div>
+            <dl className="facts">
+              <div><dt>For</dt><dd>Client hosting, customer rewards and team events</dd></div>
+              <div><dt>Days</dt><dd>Full weekend, Saturday or Sunday</dd></div>
+              <div><dt>Access</dt><dd>Ruby Red, Pearly White, Ultra Black or a mix</dd></div>
+              <div><dt>Contact</dt><dd><a href="mailto:access@clubjoia300.com">access@clubjoia300.com</a></dd></div>
+            </dl>
+          </div>
+        </section>
+
         <section className="faq">
           <div className="wrap" style={{ maxWidth: '820px' }}>
             <h2>Good to know</h2>
             <details><summary>How do I get access?</summary><p>Access is limited. Choose your access level, days and number on the <Link href="/tickets">access page</Link>, review your order summary, then pay securely online.</p></details>
-            <details><summary>Which days can I attend?</summary><p>Club JOIA 300 runs on December 4, 5 and 6, during the Abu Dhabi Grand Prix weekend. Every access level is available for all three days, or as a two-day package: Friday &amp; Sunday, or Friday &amp; Saturday.</p></details>
+            <details><summary>Which days can I attend?</summary><p>Club JOIA 300 runs on December 4, 5 and 6, during the Abu Dhabi Grand Prix weekend. Every access level is available for all three days, or as day access on Saturday (qualifying) or Sunday (race day). Friday is included with 3-day access.</p></details>
+            <details><summary>What are the hours on board?</summary><p>Friday from 2pm to 10pm. Saturday and Sunday from 2pm to 2am, with after-race celebrations once the cars have finished.</p></details>
+            <details><summary>Is there an age limit or dress code?</summary><p>Guests must be 21 or over. The dress code is smart elegant.</p></details>
+            <details><summary>How do I receive my ticket?</summary><p>Once your booking is confirmed you are invited to the Club JOIA 300 app. Activate your ticket there before the event: it acts as your full accreditation to the yacht. You will also need the official Abu Dhabi Grand Prix app for your QR code to enter Yas Marina.</p></details>
+            <details><summary>What drinks are included?</summary><p>Every access level includes an open bar throughout the event. Pearly White and Ultra Black add the premium selection: Moët &amp; Chandon, Dom Pérignon and Laurent-Perrier champagne, Belvedere and Grey Goose vodka, Hennessy VSOP and XO, Rémy Martin XO and Courvoisier cognac, Johnnie Walker Blue Label and The Macallan 18 Year Old.</p></details>
+            <details><summary>Is transport included?</summary><p>Chauffeur transfers are included with Pearly White (shared) and Ultra Black (a dedicated driver, or VIP parking if you prefer to drive).</p></details>
+            <details><summary>Can my company book several places?</summary><p>Yes. Corporate allocations are available for companies hosting clients and teams. Email <a href="mailto:access@clubjoia300.com">access@clubjoia300.com</a> and the team will arrange the details.</p></details>
+            <details><summary>What is the cancellation policy?</summary><p>Purchases can’t be refunded unless the event is cancelled by the organiser. If the organiser cancels due to circumstances beyond its control, a 20% administration fee is deducted.</p></details>
+            <details><summary>When do sales close?</summary><p>Sales close on December 3, 2026, or earlier if places sell out.</p></details>
             <details><summary>Who is behind the event?</summary><p>Club JOIA 300 is presented by Elixium Events.</p></details>
             <details><summary>Who can I contact with a booking question?</summary><p>Send an email to <a href="mailto:access@clubjoia300.com">access@clubjoia300.com</a> and the team will get back to you.</p></details>
           </div>

@@ -9,7 +9,7 @@ const BUYER = {
 };
 
 // app/api/checkout uses lib/catalog, which keeps its answer: a fresh copy for every test
-async function checkout(buyer: Record<string, unknown> = {}, items: unknown[] = [{ id: 'ruby-red/fri-sat', quantity: 2 }], cookie = '') {
+async function checkout(buyer: Record<string, unknown> = {}, items: unknown[] = [{ id: 'ruby-red/sat', quantity: 2 }], cookie = '') {
   vi.resetModules();
   const { POST } = await import('@/app/api/checkout/route');
   const res = await POST(new Request('http://site.test/api/checkout', {
@@ -59,7 +59,7 @@ describe('checkout', function () {
       name: 'Test', surname: 'Buyer', email: 'test@example.com',
       address: 'Mall Road 1', zipcode: '54000', city: 'Lahore', country: 'pakistan', countryCode: 'PK',
       gender: 'male', age: '1990-01-01', countryPhoneCode: '92', phoneNumber: '3001234567', ip: '203.0.113.7',
-      'tickets[0][ticketId]': TICKET_IDS['Ruby Red, Friday & Saturday'], 'tickets[0][quantity]': '2'
+      'tickets[0][ticketId]': TICKET_IDS['Ruby Red, Saturday'], 'tickets[0][quantity]': '2'
     });
   });
 
@@ -75,12 +75,12 @@ describe('checkout', function () {
 
   it('sends several tickets, no SMS option', async function () {
     const shop = shopMock();
-    await checkout({ sms: true }, [{ id: 'ruby-red/3-days', quantity: 1 }, { id: 'ultra-black/fri-sun', quantity: 3 }]);
+    await checkout({ sms: true }, [{ id: 'ruby-red/3-days', quantity: 1 }, { id: 'ultra-black/sun', quantity: 3 }]);
     const sent = shop.sent('buyTickets')!;
 
     expect(sent.has('sendTicketWithSms')).toBe(false);
     expect(sent.get('tickets[0][ticketId]')).toBe(TICKET_IDS['Ruby Red, 3 days']);
-    expect(sent.get('tickets[1][ticketId]')).toBe(TICKET_IDS['Ultra Black, Friday & Sunday']);
+    expect(sent.get('tickets[1][ticketId]')).toBe(TICKET_IDS['Ultra Black, Sunday']);
     expect(sent.get('tickets[1][quantity]')).toBe('3');
   });
 

@@ -29,8 +29,8 @@ describe('getCatalog', function () {
     expect(c.live).toBe(true);
     expect(c.currency).toBe('AED');
     expect(Object.keys(c.tickets)).toHaveLength(cfg.tickets.length);
-    expect(c.tickets['ruby-red/3-days']).toEqual({ price: 8000, soldOut: false });
-    expect(priceText(c, 'ruby-red', '3-days')).toBe('AED 8,000');
+    expect(c.tickets['ruby-red/3-days']).toEqual({ price: 7000, soldOut: false });
+    expect(priceText(c, 'ruby-red', '3-days')).toBe('AED 7,000');
   });
 
   it('writes the event currencies as ISO codes', async function () {
@@ -55,14 +55,14 @@ describe('getCatalog', function () {
     shopMock({
       'ticketTypes': function () {
         return cfg.tickets.map(function (t) {
-          return { id: TICKET_IDS[t.name], ticketDescription: t.name, ticketPrice: '100.00', softDelete: t.id === 'pearly-white/fri-sun' ? '1' : '0', ticketVisible: '1' };
+          return { id: TICKET_IDS[t.name], ticketDescription: t.name, ticketPrice: '100.00', softDelete: t.id === 'pearly-white/sun' ? '1' : '0', ticketVisible: '1' };
         });
       }
     });
     const { getCatalog, priceText } = await catalogModule();
     const c = await getCatalog();
 
-    expect(c.tickets['pearly-white/fri-sun']).toEqual({ price: null, soldOut: true });
+    expect(c.tickets['pearly-white/sun']).toEqual({ price: null, soldOut: true });
     expect(priceText(c, 'pearly-white', 'fri-sun')).toBe('Not available');
   });
 

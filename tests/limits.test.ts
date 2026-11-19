@@ -96,7 +96,7 @@ async function checkout(email: string, forwardedFor: string) {
   };
   const r = await routes.checkout.POST(new Request(SITE + '/api/checkout', {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': forwardedFor },
-    body: JSON.stringify({ items: [{ id: 'ruby-red/fri-sat', quantity: 1 }], buyer })
+    body: JSON.stringify({ items: [{ id: 'ruby-red/sat', quantity: 1 }], buyer })
   }));
   return { status: r.status, body: await r.json() };
 }

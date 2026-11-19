@@ -16,12 +16,13 @@ describe('tickets', function () {
 
   it('names tickets as Alfred does', function () {
     expect(ticket('ruby-red/3-days')!.name).toBe('Ruby Red, 3 days');
-    expect(ticket('ultra-black/fri-sat')!.name).toBe('Ultra Black, Friday & Saturday');
+    expect(ticket('ultra-black/sat')!.name).toBe('Ultra Black, Saturday');
     expect(ticket('nope')).toBeNull();
   });
 
-  it('sells every access level for 3 days, Friday & Sunday and Friday & Saturday only', function () {
-    expect(cfg.packages.map(function (p) { return p.id; })).toEqual(['3-days', 'fri-sun', 'fri-sat']);
+  it('sells every access level for 3 days, Saturday and Sunday only', function () {
+    expect(cfg.packages.map(function (p) { return p.id; })).toEqual(['3-days', 'sat', 'sun']);
     expect(ticket('ruby-red/sat-sun')).toBeNull();
+    expect(ticket('ruby-red/fri-sat')).toBeNull();
   });
 });
