@@ -2,6 +2,14 @@
 (() => {
   const $ = (s, el = document) => el.querySelector(s);
 
+  // Count this page view on the site's own database (lib/visits.ts); never gets in the way.
+  try {
+    const visit = JSON.stringify({ path: "/preregister", query: location.search, referrer: document.referrer });
+    if (!navigator.sendBeacon || !navigator.sendBeacon("/api/visit", visit)) {
+      fetch("/api/visit", { method: "POST", body: visit, keepalive: true }).catch(() => {});
+    }
+  } catch (e) { /* ignore */ }
+
   // Header turns solid once the hero has scrolled away.
   const nav = $("#nav");
   const onScroll = () => nav.classList.toggle("scrolled", window.scrollY > window.innerHeight * 0.6);

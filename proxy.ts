@@ -33,9 +33,10 @@ const PAGE = '/preregister/index.html';
 // static build files and the logo (the browser tab's icon) can't reveal anything on their own;
 // the ticket shop's APIs (Api/Eventsnew, shop/) are called by this site's own server, the bank check's return and the emails;
 // the pre-registration page (preregister/), its privacy notice (privacy) and form (api/preregister) are what visitors get,
+// with its visit count (api/visit)
 // with the ad platform tags' starter (tracking.js);
 // everything else, API included, goes to the pre-registration page.
-export const MAINTENANCE_PATHS = '/((?!_next/static|_next/image|assets/img/logo\\.png$|Api/Eventsnew/|shop/|preregister/|privacy$|api/preregister$|tracking\\.js$).*)';
+export const MAINTENANCE_PATHS = '/((?!_next/static|_next/image|assets/img/logo\\.png$|Api/Eventsnew/|shop/|preregister/|privacy$|api/preregister$|api/visit$|tracking\\.js$).*)';
 const closesForMaintenance = new RegExp('^' + MAINTENANCE_PATHS + '$');
 
 export function proxy(request: NextRequest) {

@@ -1,7 +1,7 @@
 /*
  * The database (DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME in .env): the members app's MySQL (club-joia-300-backend, Prisma). Its tables
  * are the members app's own (users, members, memberships, tickets, ...). The shop's own tables
- * (orders, sign-in failures) are in the same database, named shop_<table>; the pre-registration
+ * (orders, sign-in failures, website visits) are in the same database, named shop_<table>; the pre-registration
  * form's in pre_registrations. All made here on first use.
  * Note: Prisma's "migrate dev" in the members app takes tables it doesn't know as drift and offers
  * to reset the database; answer no there (on the live server "migrate deploy" doesn't check this).
@@ -18,7 +18,7 @@ type Shared = { pool: Pool | null; key?: string; ready: Promise<void> | null; ma
 // one pool per server, also across the dev server's reloads
 const shared: Shared = ((globalThis as unknown as { __cjShopMysql?: Shared }).__cjShopMysql ||= { pool: null, ready: null });
 
-const SHOP_TABLES = ['orders', 'registration_attempts', 'rate_limits', 'locks', 'payment_logs'];
+const SHOP_TABLES = ['orders', 'registration_attempts', 'rate_limits', 'locks', 'payment_logs', 'visits'];
 
 type Settings = { host: string; port: number; user: string; password: string; database: string };
 
@@ -201,6 +201,17 @@ async function migrate(): Promise<void> {
       KEY payment_logs_reference (reference, created_at),
       KEY payment_logs_payment (payment_id, created_at),
       KEY payment_logs_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    // website visits (lib/visits.ts): one row per page view, for the daily report
+    `CREATE TABLE IF NOT EXISTS shop.visits (
+      id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      day         DATE NOT NULL,                    -- UAE date
+      visitor     CHAR(16) NOT NULL,                -- anonymised, changes every day
+      path        VARCHAR(40) NOT NULL,             -- the page, e.g. /tickets
+      source      VARCHAR(60) NOT NULL,             -- instagram, facebook, linkedin, google, direct, internal, ...
+      created_at  DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      KEY visits_day (day, visitor),
+      KEY visits_day_path (day, path)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     // rows to lock: "stock" lets one order at a time past the stock check (lib/shop/orders.ts)
     `CREATE TABLE IF NOT EXISTS shop.locks (
