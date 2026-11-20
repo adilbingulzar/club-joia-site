@@ -157,23 +157,6 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="band" id="bar">
-          <div className="wrap about">
-            <div>
-              <h2>The bar</h2>
-              <p>Every guest enjoys an open bar throughout the event, from doors open to the last song, at every access level.</p>
-              <p>Pearly White and Ultra Black guests also enjoy our premium beverage selection, served on board all weekend.</p>
-              <figure className="bar-photo"><img src="/assets/img/yacht/bar-lounge.webp" alt="Guests sharing champagne on a yacht lounge deck at dusk, with the Yas Marina hotel lit up behind them" width="1672" height="941" loading="lazy" /><figcaption>Champagne on deck</figcaption></figure>
-            </div>
-            <dl className="facts">
-              <div><dt>Champagne</dt><dd>Moët &amp; Chandon, Dom Pérignon, Laurent-Perrier</dd></div>
-              <div><dt>Vodka</dt><dd>Belvedere, Grey Goose</dd></div>
-              <div><dt>Cognac</dt><dd>Hennessy VSOP and XO, Rémy Martin XO, Courvoisier</dd></div>
-              <div><dt>Whisky</dt><dd>Johnnie Walker Blue Label, The Macallan 18 Year Old</dd></div>
-            </dl>
-          </div>
-        </section>
-
         <section id="gallery">
           <div className="wrap">
             <h2>Previous editions</h2>
@@ -257,7 +240,7 @@ export default function Home() {
             <details><summary>What are the hours on board?</summary><p>Friday from 2pm to 10pm. Saturday and Sunday from 2pm to 2am, with after-race celebrations once the cars have finished.</p></details>
             <details><summary>Is there an age limit or dress code?</summary><p>Guests must be 21 or over. The dress code is smart elegant.</p></details>
             <details><summary>How do I receive my ticket?</summary><p>Once your booking is confirmed you are invited to the Club JOIA 300 app. Activate your ticket there before the event: it acts as your full accreditation to the yacht. You will also need the official Abu Dhabi Grand Prix app for your QR code to enter Yas Marina.</p></details>
-            <details><summary>What drinks are included?</summary><p>Every access level includes an open bar throughout the event. Pearly White and Ultra Black add the premium selection: Moët &amp; Chandon, Dom Pérignon and Laurent-Perrier champagne, Belvedere and Grey Goose vodka, Hennessy VSOP and XO, Rémy Martin XO and Courvoisier cognac, Johnnie Walker Blue Label and The Macallan 18 Year Old.</p></details>
+            <details><summary>What drinks are included?</summary><p>Every access level includes an open bar throughout the event. Ultra Black guests also enjoy premium plus beverages during the after-party.</p></details>
             <details><summary>Is transport included?</summary><p>Chauffeur transfers are included with Pearly White (shared) and Ultra Black (a dedicated driver, or VIP parking if you prefer to drive).</p></details>
             <details><summary>Can my company book several places?</summary><p>Yes. Corporate allocations are available for companies hosting clients and teams. Email <a href="mailto:access@clubjoia300.com">access@clubjoia300.com</a> and the team will arrange the details.</p></details>
             <details><summary>What is the cancellation policy?</summary><p>Purchases can’t be refunded unless the event is cancelled by the organiser. If the organiser cancels due to circumstances beyond its control, a 20% administration fee is deducted.</p></details>

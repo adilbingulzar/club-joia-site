@@ -47,7 +47,6 @@ const rubyPerks = [
 const pearlyPerks = rubyPerks.concat([
   'Daytime sundeck access',
   'Priority access',
-  'Premium beverages',
   'Chauffeur transfers (shared)'
 ]);
 const ultraPerks = pearlyPerks.concat([
@@ -71,7 +70,7 @@ const tiers: Tier[] = [
   {
     id: 'pearly-white', name: 'Pearly White', swatch: 'pearl', page: '/pearly-white',
     card: '/assets/img/cards/pearly-white.webp',
-    intro: 'Everything in Ruby Red, plus daytime sundeck access, priority access, premium beverages and shared chauffeur transfers.',
+    intro: 'Everything in Ruby Red, plus daytime sundeck access, priority access and shared chauffeur transfers.',
     perks: pearlyPerks, newFrom: rubyPerks.length,
     prices: { '3-days': 10000, 'sat': 4500, 'sun': 6000 }
   },
