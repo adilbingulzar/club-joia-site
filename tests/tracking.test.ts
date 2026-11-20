@@ -41,6 +41,8 @@ describe('ad platform tags', function () {
     expect(page).toMatch(/script-src [^;]*https:\/\/connect\.facebook\.net[^;]*https:\/\/snap\.licdn\.com/);
     expect(page).toMatch(/img-src [^;]*https:\/\/www\.facebook\.com[^;]*https:\/\/px\.ads\.linkedin\.com/);
     expect(page).toMatch(/connect-src [^;]*https:\/\/px\.ads\.linkedin\.com/);
+    expect(page).toMatch(/img-src [^;]*https:\/\/px4\.ads\.linkedin\.com/);
+    expect(page).toMatch(/connect-src [^;]*https:\/\/px4\.ads\.linkedin\.com/);
     const pay = contentSecurityPolicy('n', '/pay/CJ1', false, ON);
     expect(pay).not.toMatch(/facebook|licdn|linkedin/);
     expect(contentSecurityPolicy('n', '/tickets', false, OFF)).not.toMatch(/facebook|licdn|linkedin/);

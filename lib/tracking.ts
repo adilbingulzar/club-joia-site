@@ -35,6 +35,7 @@ export const META_SCRIPT = 'https://connect.facebook.net';
 export const META_PIXEL = 'https://www.facebook.com';
 export const LINKEDIN_SCRIPT = 'https://snap.licdn.com';
 export const LINKEDIN_PIXEL = 'https://px.ads.linkedin.com';
+export const LINKEDIN_PIXEL_V6 = 'https://px4.ads.linkedin.com'; // the pixel's IPv6 check, which Safari makes
 export const LINKEDIN_SYNC = 'https://www.linkedin.com'; // the pixel's redirect (li_sync)
 
 /** The hosts each CSP directive needs for the tags that are on. */
@@ -47,8 +48,8 @@ export function trackingSources(ids: TrackingIds): { script: string[]; img: stri
   }
   if (ids.linkedin) {
     s.script.push(LINKEDIN_SCRIPT);
-    s.img.push(LINKEDIN_PIXEL, LINKEDIN_SYNC);
-    s.connect.push(LINKEDIN_PIXEL);
+    s.img.push(LINKEDIN_PIXEL, LINKEDIN_PIXEL_V6, LINKEDIN_SYNC);
+    s.connect.push(LINKEDIN_PIXEL, LINKEDIN_PIXEL_V6);
   }
   return s;
 }
