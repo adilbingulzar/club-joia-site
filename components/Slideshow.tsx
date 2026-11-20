@@ -4,17 +4,19 @@ import { useEffect, useRef, useState } from 'react';
 /*
  * Home page hero background: stills show for 1.5 s, videos play to the end, then the next slide.
  * Loops. Visitors who ask for reduced motion only see the first photo.
+ * Only the first photo loads with the page; the rest wait until the page has loaded, then each slide loads
+ * while the one before it shows.
  */
-type Slide = { src: string; video?: boolean; preload?: 'auto' | 'metadata'; pos?: string };
+type Slide = { src: string; video?: boolean; pos?: string };
 
 const SLIDES: Slide[] = [
   { src: '/assets/slides/new/1.jpg', pos: '50% 62%' }, // yacht + F1
-  { src: '/assets/slides/new/2.mp4', video: true, preload: 'auto' }, // party
+  { src: '/assets/slides/new/2.mp4', video: true }, // party
   { src: '/assets/slides/new/3.jpg', pos: '75% 16%' }, // Black Coffee: face and name
-  { src: '/assets/slides/new/4.mp4', video: true, preload: 'metadata' }, // race, then the food
+  { src: '/assets/slides/new/4.mp4', video: true }, // race, then the food
   { src: '/assets/slides/new/5.jpg', pos: '50% 35%' }, // guest
   { src: '/assets/slides/new/6.jpg', pos: '78% 18%' }, // Gordo: face and name (the name runs near the right edge)
-  { src: '/assets/slides/new/7.mp4', video: true, preload: 'metadata' }, // food skewers, chef
+  { src: '/assets/slides/new/7.mp4', video: true }, // food skewers, chef
   { src: '/assets/slides/new/8.jpg', pos: '60% 50%' } // DJ
 ];
 const STILL_MS = 1500;
@@ -32,12 +34,14 @@ export default function Slideshow() {
     function prepare(n: number) {
       const el = list[n % list.length];
       if (el instanceof HTMLVideoElement && el.preload !== 'auto') { el.preload = 'auto'; el.load(); }
+      if (el instanceof HTMLImageElement && !el.getAttribute('src') && el.dataset.src) el.src = el.dataset.src;
     }
     function wait(ms: number) { clearTimeout(timer); timer = setTimeout(next, ms); }
     function show(n: number) {
       const prev = list[i];
       if (prev instanceof HTMLVideoElement) prev.pause();
       i = n % list.length;
+      prepare(i); // in case the page was still loading when this slide came up
       setOn(i);
       prepare(i + 1); // start loading the next slide while this one shows
       const el = list[i];
@@ -58,11 +62,15 @@ export default function Slideshow() {
       el.addEventListener('error', h);
       return h;
     });
-    prepare(1);
+    // the next slide starts loading once the page (and the first photo) has loaded
+    function start() { prepare(1); }
+    if (document.readyState === 'complete') start();
+    else window.addEventListener('load', start, { once: true });
     wait(STILL_MS);
 
     return function () {
       clearTimeout(timer);
+      window.removeEventListener('load', start);
       list.forEach(function (el, k) {
         const h = done[k];
         if (!(el instanceof HTMLVideoElement)) return;
@@ -78,8 +86,8 @@ export default function Slideshow() {
         const cls = 'slide' + (k === on ? ' on' : '');
         const ref = function (el: HTMLImageElement | HTMLVideoElement | null) { els.current[k] = el; };
         return s.video
-          ? <video key={s.src} ref={ref} className={cls} src={s.src} muted playsInline preload={s.preload} />
-          : <img key={s.src} ref={ref} className={cls} src={s.src} alt="" data-pos-desk="" style={{ '--pos': s.pos } as React.CSSProperties} />;
+          ? <video key={s.src} ref={ref} className={cls} src={s.src} muted playsInline preload="none" />
+          : <img key={s.src} ref={ref} className={cls} src={k === 0 ? s.src : undefined} data-src={s.src} alt="" data-pos-desk="" style={{ '--pos': s.pos } as React.CSSProperties} />;
       })}
     </div>
   );

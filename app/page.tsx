@@ -7,7 +7,10 @@ import { CJ_CONFIG as cfg } from '@/lib/config';
 import Price from '@/components/Price';
 import GalleryVideo from '@/components/GalleryVideo';
 
-export const metadata: Metadata = { title: 'Club JOIA 300 | Abu Dhabi Grand Prix, December 4, 5 & 6' };
+export const metadata: Metadata = {
+  title: 'Club JOIA 300 | Abu Dhabi Grand Prix, December 4, 5 & 6',
+  description: 'Club JOIA 300: the exclusive trackside mega yacht experience at the Abu Dhabi Grand Prix, December 4, 5 & 6. Open bar, fine dining, DJs and track views.'
+};
 
 // Previous editions: a highlights film and four photos a year (public/assets/gallery/<year>/)
 const GALLERY: { year: string; photos: string[] }[] = [
