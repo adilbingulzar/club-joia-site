@@ -116,20 +116,33 @@ export default function Home() {
 
         <section className="lineup" id="entertainment">
           <div className="wrap">
-            <h2>Entertainment</h2>
-            <p className="lineup-lead">Three days of full DJ programming. Saturday and Sunday bring 12 hours of non-stop music, with headliners Gordo on Saturday, December 5 and Black Coffee on Sunday, December 6.</p>
+            <div className="lineup-head">
+              <div>
+                <p className="eyebrow">Entertainment</p>
+                <h2>Three days of electric energy.<br />World-class DJ line-up.<br />One extraordinary Sundeck.</h2>
+              </div>
+              <div className="btns">
+                <Link className="btn" href="/tickets">Book your access</Link>
+                <span className="ltd">Limited availability</span>
+              </div>
+            </div>
+            <div className="lineup-lead">
+              <p>Experience two exceptional headline performances by Black Coffee and Gordo on the Sundeck at Club JOIA 300, alongside an exciting line-up of local club star DJs throughout the weekend.</p>
+              <p>Set against the backdrop of the Abu Dhabi Grand Prix, the Sundeck transforms into an exclusive setting for world-class music, bringing together an intimate crowd, premium drinks and an electric atmosphere from sun-soaked afternoons into the night. While this exceptional DJ line-up is stationed on the Sundeck, their sounds will be radiated throughout all remaining decks, distributing a unique Club JOIA 300 energy on our private mega yacht.</p>
+              <p className="lineup-tag">Discover the music. Feel the energy. Be part of Club JOIA 300.</p>
+            </div>
             <div className="artists-grid">
               <article className="artist">
                 <figure><img src="/assets/img/artists/gordo.jpg" alt="Gordo in a black leather jacket and dark sunglasses" width="532" height="640" loading="lazy" /></figure>
-                <small>Saturday, December 5 &nbsp;|&nbsp; Headliner</small>
+                <small>Saturday, December 5 &nbsp;|&nbsp; Headliner · Live on the Sundeck</small>
                 <h3>Gordo</h3>
-                <p>An internationally acclaimed DJ and Afro house icon takes centre stage at Club JOIA.</p>
+                <p>Get ready for an electrifying Sundeck experience as Afro house powerhouse Gordo brings his signature high-energy beats and infectious rhythms to Club JOIA 300.</p>
               </article>
               <article className="artist">
                 <figure><img src="/assets/img/artists/black-coffee.jpg" alt="Black Coffee seated in a pinstripe suit and black-rimmed glasses" width="799" height="1200" loading="lazy" style={{ objectPosition: '50% 30%' }} /></figure>
-                <small>Sunday, December 6 &nbsp;|&nbsp; Headliner</small>
+                <small>Sunday, December 6 &nbsp;|&nbsp; Headliner · Live on the Sundeck</small>
                 <h3>Black Coffee</h3>
-                <p>The Grammy-winning house music icon brings his signature sound to the 3rd year edition of JOIA.</p>
+                <p>Experience Grammy Award-winning Black Coffee live on the Sundeck, bringing his signature blend of soulful rhythms and captivating Afro house beats to an unforgettable weekend finale.</p>
               </article>
             </div>
           </div>
