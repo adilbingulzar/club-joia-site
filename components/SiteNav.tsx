@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import CartCount from './CartCount';
+import { CJ_CONFIG } from '@/lib/config';
 
 export type Cta = { href: string; label: string; badge?: boolean };
 
@@ -44,7 +45,7 @@ export function PageHeader(props: { cta?: Cta; current?: string }) {
 export function Footer() {
   return (
     <footer>
-      <div className="wrap"><span>Club JOIA 300 | Abu Dhabi Grand Prix, December 4, 5 &amp; 6</span><span>An Elixium Events production</span><small className="processed-by">Arrangement processed by tiqs.com/pleazz.nl/tiqs-me</small></div>
+      <div className="wrap"><span>Club JOIA 300 | Abu Dhabi Grand Prix, December 4, 5 &amp; 6</span><span>WhatsApp <a href={CJ_CONFIG.whatsapp.link} target="_blank" rel="noopener">{CJ_CONFIG.whatsapp.number}</a></span><span>An Elixium Events production</span><small className="processed-by">Arrangement processed by tiqs.com/pleazz.nl/tiqs-me</small></div>
     </footer>
   );
 }

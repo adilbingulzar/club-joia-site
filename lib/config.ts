@@ -113,6 +113,8 @@ tiers.forEach(function (t) {
 export const CJ_CONFIG = {
   currency: 'AED',
   maxPerTicket: 10, // max quantity of one ticket per order
+  // the team's WhatsApp: shown on the home page (Contact, FAQ) and in every page's footer
+  whatsapp: { number: '+971 50 7199440', link: 'https://wa.me/971507199440' },
   packages: packages,
   tiers: tiers,
   tickets: tickets,

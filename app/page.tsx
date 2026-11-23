@@ -241,6 +241,7 @@ export default function Home() {
               <div><dt>Days</dt><dd>Full weekend, Saturday or Sunday</dd></div>
               <div><dt>Access</dt><dd>Ruby Red, Pearly White, Ultra Black or a mix</dd></div>
               <div><dt>Contact</dt><dd><a href="mailto:access@clubjoia300.com">access@clubjoia300.com</a></dd></div>
+              <div><dt>WhatsApp</dt><dd><a href={cfg.whatsapp.link} target="_blank" rel="noopener">{cfg.whatsapp.number}</a></dd></div>
             </dl>
           </div>
         </section>
@@ -259,7 +260,7 @@ export default function Home() {
             <details><summary>What is the cancellation policy?</summary><p>Purchases can’t be refunded unless the event is cancelled by the organiser. If the organiser cancels due to circumstances beyond its control, a 20% administration fee is deducted.</p></details>
             <details><summary>When do sales close?</summary><p>Sales close on December 3, 2026, or earlier if places sell out.</p></details>
             <details><summary>Who is behind the event?</summary><p>Club JOIA 300 is presented by Elixium Events.</p></details>
-            <details><summary>Who can I contact with a booking question?</summary><p>Send an email to <a href="mailto:access@clubjoia300.com">access@clubjoia300.com</a> and the team will get back to you.</p></details>
+            <details><summary>Who can I contact with a booking question?</summary><p>Send an email to <a href="mailto:access@clubjoia300.com">access@clubjoia300.com</a> or a WhatsApp message to <a href={cfg.whatsapp.link} target="_blank" rel="noopener">{cfg.whatsapp.number}</a> and the team will get back to you.</p></details>
           </div>
         </section>
 
