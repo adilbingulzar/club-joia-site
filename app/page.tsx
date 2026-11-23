@@ -94,7 +94,7 @@ export default function Home() {
               <p>Club JOIA 300 brings luxury yacht access to the Abu Dhabi Grand Prix. Spend race weekend aboard JOIA, a 65 m mega yacht at Yas Marina, from the afternoon sessions to the sunset over the marina and on into the night, with the cars passing just metres away.</p>
               <p>Expect a private, invite-style atmosphere: live sets from Black Coffee and Gordo, dining by Roberto’s and an easy, elegant crowd. Access is limited, so book early.</p>
               <div className="about-photos">
-                <figure className="ap-main"><img src="/assets/img/yacht/side-aerial.webp" alt="JOIA, a 65 m mega yacht, at sea at sunset with its sundeck and jacuzzi deck in view" width="1672" height="941" loading="lazy" /><figcaption>JOIA, The Crown Jewel</figcaption></figure>
+                <figure className="ap-main"><img src="/assets/img/yacht/sundeck-aerial.webp" alt="JOIA's sundeck from above: teak deck with sunbeds, lounge seating around a fire pit and a curved bar, the sea all around" width="1280" height="720" loading="lazy" /><figcaption>JOIA, The Crown Jewel</figcaption></figure>
                 <figure><img src="/assets/img/yacht/lounge-deck.webp" alt="Open-air lounge deck with teak floors, sofas and a jacuzzi facing the sea" width="1672" height="941" loading="lazy" /><figcaption>Lounge deck</figcaption></figure>
                 <figure><img src="/assets/img/yacht/deck-bar.webp" alt="Deck bar with stools and a stainless steel staircase at sunset" width="1672" height="941" loading="lazy" /><figcaption>Deck bar</figcaption></figure>
               </div>
