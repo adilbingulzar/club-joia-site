@@ -107,6 +107,15 @@ h2{font-family:var(--disp);font-weight:800;font-size:clamp(19px,2.2vw,28px);line
 footer{padding:36px 0 44px;font-size:14px;color:var(--mute)}
 footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px}
 footer .processed-by{flex-basis:100%;font-size:11px}
+/* floating WhatsApp button (components/SiteNav WhatsAppButton) */
+.wa-float{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:30;display:flex;align-items:center;gap:10px;padding:10px 18px 10px 12px;border-radius:99px;background:#25d366;color:#05210f;text-decoration:none;font-weight:600;font-size:15px;line-height:1.15;box-shadow:0 8px 24px rgba(0,0,0,.45);transition:transform .2s,box-shadow .2s,bottom .25s}
+.wa-float:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.55)}
+.wa-float svg{width:30px;height:30px;flex:none}
+.wa-float small{display:block;font-size:11px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;opacity:.75}
+.wa-float:focus-visible{outline-color:#25d366}
+body:has(.order-bar.show) .wa-float{bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+footer:has(.wa-float){padding-bottom:110px}
+@media(max-width:480px){.wa-float{padding:9px 14px 9px 10px;font-size:14px}.wa-float svg{width:26px;height:26px}}
 
 @media(max-width:820px){
  body{font-size:16px}

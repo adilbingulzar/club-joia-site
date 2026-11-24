@@ -83,7 +83,7 @@ export default function TierPage({ id }: { id: string }) {
         </section>
       </main>
 
-      <Footer />
+      <Footer whatsapp />
     </>
   );
 }

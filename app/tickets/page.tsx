@@ -23,7 +23,7 @@ export default function TicketsPage() {
 
       <OrderBar />
 
-      <Footer />
+      <Footer whatsapp />
     </>
   );
 }

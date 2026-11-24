@@ -70,7 +70,7 @@ export default function TermsPage() {
         <Link className="btn" href="/tickets">Choose your access</Link>
       </main>
 
-      <Footer />
+      <Footer whatsapp />
     </>
   );
 }

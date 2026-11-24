@@ -79,7 +79,7 @@ export default async function PaymentStatusPage({ params, searchParams }: Props)
             </div>}
       </main>
 
-      <Footer />
+      <Footer whatsapp />
       {/* the order is placed: a new one would book the tickets twice */}
       {page.inProgress && <ClearCart />}
     </>
