@@ -4,72 +4,12 @@
  * /thank-you (or /payment/<status>).
  */
 import { NextResponse } from 'next/server';
-import { CJ_CONFIG as cfg, ticket } from '@/lib/config';
+import { CheckoutError, placeOrder, readBuyer } from '@/lib/checkout';
 import { country } from '@/lib/countries';
-import { getCatalog } from '@/lib/catalog';
 import { shopConfig } from '@/lib/shop/config';
-import { buyTickets, preparePayment, ticketTypes } from '@/lib/shop/orders';
-import { isOver21, UNDER_21 } from '@/lib/age';
+import { preparePayment } from '@/lib/shop/orders';
 import { clientIp } from '@/lib/ip-allowlist';
 import { attributionFromCookies } from '@/lib/attribution';
-
-type Buyer = {
-  firstName: string; lastName: string; email: string; repeatEmail: string;
-  address: string; zipcode: string; city: string; country: string; gender: string;
-  birthday: string; phoneCode: string; phone: string; over21: boolean; terms: boolean; agencyCode: string;
-};
-
-class CheckoutError extends Error {}
-
-function text(v: unknown, max = 100): string {
-  return typeof v === 'string' ? v.trim().slice(0, max) : '';
-}
-
-// the optional agency (seller) code: letters, digits, space, - _ . only, upper case, up to 50
-function agencyCode(v: unknown): string {
-  return text(v, 50).replace(/[^A-Za-z0-9 _.\-]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
-}
-
-function validBirthday(s: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  const d = new Date(s + 'T00:00:00Z');
-  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s && d.getTime() < Date.now() && d.getUTCFullYear() >= 1900;
-}
-
-function readBuyer(raw: Record<string, unknown>): Buyer {
-  const b: Buyer = {
-    firstName: text(raw.firstName), lastName: text(raw.lastName),
-    email: text(raw.email, 150).toLowerCase(), repeatEmail: text(raw.repeatEmail, 150).toLowerCase(),
-    address: text(raw.address, 200), zipcode: text(raw.zipcode, 20), city: text(raw.city),
-    country: text(raw.country, 2), gender: text(raw.gender, 10), birthday: text(raw.birthday, 10),
-    phoneCode: text(raw.phoneCode, 2), phone: text(raw.phone, 20).replace(/[\s\-()]/g, ''),
-    over21: raw.over21 === true, terms: raw.terms === true,
-    agencyCode: agencyCode(raw.agencyCode)
-  };
-
-  if (!b.firstName || !b.lastName || !b.address || !b.zipcode || !b.city) throw new CheckoutError('Please fill in all fields.');
-  if (!/^[\p{L}\p{M}' .\-]+$/u.test(b.firstName + b.lastName)) throw new CheckoutError('Please use letters only in your name.');
-  if (!/^[A-Za-z0-9 \-]{2,20}$/.test(b.zipcode)) throw new CheckoutError('Please enter a valid zip code.');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email)) throw new CheckoutError('Please enter a valid email address.');
-  if (b.email !== b.repeatEmail) throw new CheckoutError('The email addresses don’t match.');
-  if (!country(b.country)) throw new CheckoutError('Please select your country.');
-  if (b.gender && ['male', 'female', 'nogender'].indexOf(b.gender) < 0) throw new CheckoutError('Please select your gender.');
-  if (b.birthday && !validBirthday(b.birthday)) throw new CheckoutError('Please enter a valid birthday.');
-  if (b.birthday && !isOver21(b.birthday)) throw new CheckoutError(UNDER_21);
-  if (!country(b.phoneCode) || !/^\d{6,15}$/.test(b.phone)) throw new CheckoutError('Please enter a valid phone number.');
-  if (!b.over21) throw new CheckoutError('Please confirm that you are older than 21.');
-  if (!b.terms) throw new CheckoutError('Please agree to the terms and conditions.');
-  return b;
-}
-
-// the shop's ticket ids of the event by name ("Ruby Red, 3 days"), the ones on sale
-async function ticketIds(): Promise<Record<string, string>> {
-  const ids: Record<string, string> = {};
-  (await ticketTypes(shopConfig.event)).forEach(function (t) {
-    if (t.softDelete === '0' && t.ticketVisible === '1') ids[String(t.ticketDescription).trim()] = String(t.id);
-  });
-  return ids;
-}
 
 export async function POST(request: Request) {
   if (!shopConfig.event || !shopConfig.publicUrl) {
@@ -85,55 +25,19 @@ export async function POST(request: Request) {
 
     const buyer = readBuyer(body.buyer);
     const buyerCountry = country(buyer.country)!;
-    const catalog = await getCatalog();
-    if (!catalog.live) throw new CheckoutError('Ticket prices can’t be loaded right now. You have not been charged. Please try again in a moment.');
-    const ids = await ticketIds();
-
-    const form: Record<string, string> = {
-      name: buyer.firstName,
-      surname: buyer.lastName,
-      email: buyer.email,
-      address: buyer.address,
-      zipcode: buyer.zipcode,
-      city: buyer.city,
-      country: buyerCountry.name.toLowerCase(),
-      countryCode: buyerCountry.code,
-      countryPhoneCode: country(buyer.phoneCode)!.dial,
-      phoneNumber: buyer.phone,
-      // the buyer's address, for the shop's limit on unpaid orders: the one nginx added (the last
-      // X-Forwarded-For entry), not one the buyer wrote
-      ip: clientIp(request.headers)
-    };
-    // left out when empty
-    if (buyer.gender) form.gender = buyer.gender;
-    if (buyer.birthday) form.age = buyer.birthday;
-    if (buyer.agencyCode) form.agencyCode = buyer.agencyCode;
     // the ad campaign the buyer came from, if any (proxy.ts keeps it in a cookie)
     const campaign = attributionFromCookies(request.headers.get('cookie'));
-    if (campaign) form.attribution = JSON.stringify(campaign);
-
-    body.items.slice(0, cfg.tickets.length).forEach(function (item: { id?: unknown; quantity?: unknown }, i: number) {
-      const t = ticket(String(item && item.id));
-      const quantity = Number(item && item.quantity);
-      if (!t || t.soldOut || !catalog.tickets[t.id] || catalog.tickets[t.id].soldOut || !Number.isInteger(quantity) || quantity < 1 || quantity > cfg.maxPerTicket) {
-        throw new CheckoutError('Your order has a ticket that isn’t available. Please review your tickets.');
-      }
-      if (!ids[t.name]) throw new CheckoutError(t.name + ' isn’t on sale at the moment. Please choose another ticket.');
-      form['tickets[' + i + '][ticketId]'] = ids[t.name];
-      form['tickets[' + i + '][quantity]'] = String(quantity);
+    const orderId = await placeOrder(buyer, body.items, {
+      // the buyer's address, for the shop's limit on unpaid orders: the one nginx added (the last
+      // X-Forwarded-For entry), not one the buyer wrote
+      ip: clientIp(request.headers),
+      attribution: campaign ? JSON.stringify(campaign) : undefined
     });
-
-    const res = await buyTickets(form);
-    if (res.status === '1' && res.orderId) {
-      // the payment now, so a refusal shows on the form
-      const pay = await preparePayment(res.orderId);
-      if (pay && pay.state === 'ready') return NextResponse.json({ url: shopConfig.siteUrl + '/pay/' + encodeURIComponent(res.orderId) });
-      console.error('checkout: no payment for', buyerCountry.name, res.orderId, pay ? pay.state : 'no order');
-      throw new CheckoutError(pay && pay.state === 'error' ? pay.message : 'Payment isn’t available for your order right now. You have not been charged. Please try again later.');
-    }
-
-    // the shop's messages are written for buyers (sold out, unfinished orders, ...)
-    throw new CheckoutError(res && res.message ? String(res.message) : 'We couldn’t start the payment. Please try again in a moment.');
+    // the payment now, so a refusal shows on the form
+    const pay = await preparePayment(orderId);
+    if (pay && pay.state === 'ready') return NextResponse.json({ url: shopConfig.siteUrl + '/pay/' + encodeURIComponent(orderId) });
+    console.error('checkout: no payment for', buyerCountry.name, orderId, pay ? pay.state : 'no order');
+    throw new CheckoutError(pay && pay.state === 'error' ? pay.message : 'Payment isn’t available for your order right now. You have not been charged. Please try again later.');
   } catch (e) {
     if (e instanceof CheckoutError) return NextResponse.json({ error: e.message }, { status: 400 });
     console.error('checkout:', e);

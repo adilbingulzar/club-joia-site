@@ -33,6 +33,12 @@ const PAGES: Record<string, Page> = {
     text: 'You have not been charged. Your tickets are still in your order, so you can try again.',
     inProgress: false
   },
+  // a payment link from our team (app/shop/link) past its date
+  expired: {
+    title: 'Payment Link Expired', eyebrow: 'Payment link expired', heading: 'This payment link has expired.',
+    text: 'You have not been charged. Please contact us for a new payment link.',
+    inProgress: false
+  },
   denied: {
     title: 'Payment Declined', eyebrow: 'Payment declined', heading: 'Your payment didn’t go through.',
     text: 'You have not been charged. Please try again or use another card.',

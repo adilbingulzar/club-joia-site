@@ -81,6 +81,8 @@ let routes: {
   card: { POST: (r: Request) => Promise<Response> };
   status: { POST: (r: Request) => Promise<Response> };
   retry: { GET: (r: Request, c: Ctx<{ ref: string }>) => Promise<Response> };
+  link: { GET: (r: Request, c: Ctx<{ ref: string }>) => Promise<Response> };
+  staff: { POST: (r: Request, c: Ctx<{ action: string }>) => Promise<Response> };
   prereg: { POST: (r: Request) => Promise<Response> };
 };
 let closeDb: () => Promise<void>;
@@ -111,6 +113,7 @@ async function get(url: string) {
   if (path[2] === 'pay') r = await routes.pay.GET(req, { params: Promise.resolve({ ref: path[3] }) });
   else if (path[2] === 'return') r = await routes.ret.GET(req, { params: Promise.resolve({ ref: path[3] }) });
   else if (path[2] === 'retry') r = await routes.retry.GET(req, { params: Promise.resolve({ ref: path[3] }) });
+  else if (path[2] === 'link') r = await routes.link.GET(req, { params: Promise.resolve({ ref: path[3] }) });
   else throw new Error('no route for ' + url);
   return { status: r.status, location: r.headers.get('location') || r.headers.get('x-next-page') };
 }
@@ -186,6 +189,8 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
       card: await import('@/app/api/pay/route'),
       status: await import('@/app/api/pay/status/route'),
       retry: await import('@/app/shop/retry/[ref]/route'),
+      link: await import('@/app/shop/link/[ref]/route'),
+      staff: await import('@/app/api/staff/[action]/route'),
       prereg: await import('@/app/api/preregister/route')
     };
     closeDb = (await import('@/lib/shop/db')).closeDb;
@@ -429,6 +434,88 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     await pool.query('UPDATE shop.orders SET pay_expires_at = UTC_TIMESTAMP(3) - INTERVAL 1 MINUTE WHERE ref = $1', [ref2b]);
     expect(await payState(ref2b)).toEqual({ state: 'expired', ref: ref2b });
     expect((await card(ref2b)).body).toEqual({ error: 'This payment has expired. Please start again: you have not been charged.', retry: false });
+  });
+
+  it('a payment link from the members app: made by staff, emailed, valid for its days, starts again, can be cancelled', async function () {
+    const staff = async function (action: string, body: unknown, key = ADMIN_KEY) {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (key) headers.Authorization = 'Bearer ' + key;
+      const r = await routes.staff.POST(new Request(SITE + '/api/staff/' + action, { method: 'POST', headers, body: JSON.stringify(body) }), { params: Promise.resolve({ action }) });
+      return { status: r.status, body: await r.json() };
+    };
+    const linkBuyer = function (to: string) {
+      return { firstName: 'Link', lastName: 'Tester', email: to, address: 'Street 1', zipcode: '12345', city: 'Dubai', country: 'AE', gender: 'female', birthday: '1990-05-01', phoneCode: 'AE', phone: '501234567', over21: true, terms: true };
+    };
+    const to = 'shoptest+link-' + Date.now() + '@example.com';
+
+    // only the members app's server (the key)
+    expect((await staff('catalog', {}, '')).status).toBe(401);
+    const cat = (await staff('catalog', {})).body;
+    expect(cat.tickets.find(function (t: { id: string }) { return t.id === 'ruby-red/sat'; })).toMatchObject({ name: 'Ruby Red, Saturday', soldOut: false });
+    expect(cat.countries.length).toBeGreaterThan(100);
+
+    // the checkout's checks, and who made it
+    expect((await staff('order', { buyer: linkBuyer(to), items: [{ id: 'ruby-red/sat', quantity: 2 }] })).status).toBe(400);
+    expect((await staff('order', { createdBy: 'staff-test-user', buyer: { ...linkBuyer(to), zipcode: '' }, items: [{ id: 'ruby-red/sat', quantity: 2 }] })).body)
+      .toEqual({ error: 'Please fill in all fields.' });
+    const made = await staff('order', { createdBy: 'staff-test-user', buyer: linkBuyer(to), items: [{ id: 'ruby-red/sat', quantity: 2 }], linkDays: 2, sendEmail: true });
+    expect(made.status).toBe(200);
+    const ref = made.body.ref;
+    // emailed (here the console driver only writes it to the log, so not "delivered")
+    expect(made.body).toEqual({ ref, url: SITE + '/shop/link/' + ref, amount: 6000, currency: 'USD', expiresAt: expect.any(String), emailed: false });
+    const days = (Date.parse(made.body.expiresAt) - Date.now()) / 86400000;
+    expect(days).toBeGreaterThan(1.99);
+    expect(days).toBeLessThan(2.01);
+    const mail = mails.join('\n');
+    expect(mail).toContain('To: ' + to);
+    expect(mail).toContain('Subject: Complete your booking – Club JOIA 300');
+    expect(mail).toContain('Complete your payment: ' + SITE + '/shop/link/' + ref);
+    expect(mail).toContain('Arrangement / Ticket: 2 × Ruby Red, Saturday');
+    expect(mail).toContain('This payment link is valid until ');
+    expect(await one('SELECT created_by, status, retry_of, email FROM shop.orders WHERE ref = $1', [ref])).toEqual({ created_by: 'staff-test-user', status: 'pending', retry_of: null, email: to });
+
+    // the link: the payment page, also after the website's half hour
+    expect(await get(made.body.url)).toEqual({ status: 302, location: SITE + '/pay/' + ref });
+    await pool.query('UPDATE shop.orders SET created_at = created_at - INTERVAL 1 DAY WHERE ref = $1', [ref]);
+    expect((await payState(ref))!.state).toBe('ready');
+
+    // its IFZA payment expired: the link starts a new payment (a retry, still the staff's)
+    await pool.query('UPDATE shop.orders SET pay_expires_at = UTC_TIMESTAMP(3) - INTERVAL 1 MINUTE WHERE ref = $1', [ref]);
+    const again = await get(made.body.url);
+    const ref2 = decodeURIComponent(String(again.location).split('/pay/')[1]);
+    expect(ref2).not.toBe(ref);
+    expect(await one('SELECT retry_of, created_by, amount, link_expires_at = (SELECT link_expires_at FROM shop.orders WHERE ref = $2) AS same_expiry FROM shop.orders WHERE ref = $1', [ref2, ref]))
+      .toEqual({ retry_of: ref, created_by: 'staff-test-user', amount: '6000.00', same_expiry: 1 });
+    expect((await payState(ref2))!.state).toBe('ready');
+    // opened again, or by the expired page's "start again": the same open payment, no new order
+    expect((await get(made.body.url)).location).toBe(SITE + '/pay/' + ref2);
+    expect((await get(SITE + '/shop/retry/' + ref)).location).toBe(SITE + '/pay/' + ref2);
+
+    // cancelled by staff: every unpaid payment of it closes, the link shows "cancelled"
+    expect((await staff('cancel', { ref: 'NOPE1' })).body).toEqual({ result: 'not_found' });
+    expect((await staff('cancel', { ref })).body).toEqual({ result: 'cancelled' });
+    expect((await pool.query('SELECT status FROM shop.orders WHERE ref = $1 OR retry_of = $1', [ref])).rows.map(function (r) { return r.status; })).toEqual(['cancelled', 'cancelled']);
+    expect((await get(made.body.url)).location).toBe(SITE + '/payment/cancel?orderid=' + ref);
+    expect(await payState(ref2)).toEqual({ state: 'done', page: SITE + '/payment/cancel?orderid=' + ref2 });
+
+    // past its days: the "expired" page; without an email, no email; 1 day without linkDays
+    const late = await staff('order', { createdBy: 'staff-test-user', buyer: linkBuyer(to), items: [{ id: 'ruby-red/sat', quantity: 1 }] });
+    expect(late.body.emailed).toBe(false);
+    expect(mails.join('\n').split('Complete your payment: ' + late.body.url)).toHaveLength(1);
+    expect((Date.parse(late.body.expiresAt) - Date.now()) / 86400000).toBeGreaterThan(0.99);
+    await pool.query('UPDATE shop.orders SET link_expires_at = UTC_TIMESTAMP(3) - INTERVAL 1 MINUTE WHERE ref = $1', [late.body.ref]);
+    expect((await get(late.body.url)).location).toBe(SITE + '/payment/expired?orderid=' + late.body.ref);
+    expect(await payState(late.body.ref)).toEqual({ state: 'expired', ref: late.body.ref });
+
+    // a paid link can't be cancelled, and goes to the thank-you page
+    const paid = await staff('order', { createdBy: 'staff-test-user', buyer: linkBuyer(to), items: [{ id: 'pearly-white/sun', quantity: 1 }] });
+    await toBank(paid.body.ref);
+    answers[paid.body.ref] = { status: 'PAID' };
+    expect((await get(back(paid.body.ref))).location).toBe(SITE + '/thank-you?orderid=' + paid.body.ref);
+    expect((await staff('cancel', { ref: paid.body.ref })).body).toEqual({ result: 'paid' });
+    expect((await get(paid.body.url)).location).toBe(SITE + '/thank-you?orderid=' + paid.body.ref);
+    // a website order isn't a payment link
+    expect((await get(SITE + '/shop/link/' + ref1)).status).toBe(404);
   });
 
   it('limits unpaid orders per email (50) and per address (50) in an hour', async function () {

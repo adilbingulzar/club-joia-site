@@ -152,7 +152,9 @@ function payLink(ref: string): string {
 }
 
 // buyTickets: { status: '1', paymentUrl, orderId } or { status: '0', message } for the buyer
-export async function buyTickets(body: Record<string, string>) {
+// opts.createdBy: the members app staff account (users.id) making it as a payment link (lib/checkout
+// placeOrder from app/api/staff): no limit on unpaid orders, and it can be paid for opts.linkDays days
+export async function buyTickets(body: Record<string, string>, opts: { createdBy?: string; linkDays?: number } = {}) {
   try {
     if (!ifza.configured()) throw new BuyerError('Online payment isn’t set up yet. Please contact us to complete your booking.');
     const e = await saleEvent();
@@ -170,7 +172,7 @@ export async function buyTickets(body: Record<string, string>) {
         );
         return Number(r.rows[0].n);
       };
-      if (await unpaid('email', order.buyer.email) >= UNPAID_PER_EMAIL || await unpaid('ip', order.buyer.ip) >= UNPAID_PER_IP) {
+      if (!opts.createdBy && (await unpaid('email', order.buyer.email) >= UNPAID_PER_EMAIL || await unpaid('ip', order.buyer.ip) >= UNPAID_PER_IP)) {
         throw new BuyerError('You have several unfinished orders. Please complete one of them or try again in an hour.');
       }
       const t = await taken(c, e.id);
@@ -180,9 +182,10 @@ export async function buyTickets(body: Record<string, string>) {
       });
       const r = newRef();
       await c.query(
-        'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, attribution, agency_code) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+        'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, attribution, agency_code, created_by, link_expires_at) ' +
+          'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CASE WHEN $11 IS NULL THEN NULL ELSE NOW(3) + INTERVAL $12 DAY END)',
         [r, e.id, order.buyer.email, order.buyer.ip, JSON.stringify(order.buyer), JSON.stringify(order.items), amount.toFixed(2), config.currency,
-          order.attribution ? JSON.stringify(order.attribution) : null, order.agencyCode]
+          order.attribution ? JSON.stringify(order.attribution) : null, order.agencyCode, opts.createdBy || null, Math.max(1, Math.min(30, Math.floor(opts.linkDays || 1)))]
       );
       return r;
     });
@@ -285,7 +288,8 @@ const UNAVAILABLE = 'Payment isn’t available for your order right now. You hav
 export async function preparePayment(ref: string): Promise<PayState | null> {
   const r = await transaction(async function (c): Promise<PayState | 'settle' | null> {
     const o = (await c.query(
-      'SELECT *, (pay_expires_at > NOW(3) + INTERVAL 1 MINUTE) AS pay_open, (created_at > NOW(3) - INTERVAL $2 MINUTE) AS held FROM shop.orders WHERE ref = $1 FOR UPDATE',
+      'SELECT *, (pay_expires_at > NOW(3) + INTERVAL 1 MINUTE) AS pay_open, (created_at > NOW(3) - INTERVAL $2 MINUTE) AS held, ' +
+        '(link_expires_at IS NULL OR link_expires_at > NOW(3)) AS link_open FROM shop.orders WHERE ref = $1 FOR UPDATE',
       [ref, config.holdMinutes]
     )).rows[0];
     if (!o) return null;
@@ -296,7 +300,8 @@ export async function preparePayment(ref: string): Promise<PayState | null> {
       return { state: 'ready', ref: o.ref, amount: Number(o.amount), currency: o.currency, items: o.items, init };
     };
     if (o.pay_id) return Number(o.pay_open) ? ready(o.pay_init) : { state: 'expired', ref: o.ref };
-    if (!Number(o.held)) return { state: 'expired', ref: o.ref };
+    // a payment link from the members app (created_by) is open until its link_expires_at, not half an hour
+    if (o.created_by ? !Number(o.link_open) : !Number(o.held)) return { state: 'expired', ref: o.ref };
     if (!ifza.configured()) return { state: 'error', message: UNAVAILABLE };
 
     const created = await ifza.createPayment({
@@ -467,6 +472,8 @@ export async function retryUrl(ref: string): Promise<string | null> {
   )).rows[0];
   if (done) return sitePage('paid', done.ref);
   if (!ifza.configured()) return config.altPaymentUrl;
+  // a payment link from the members app: its own rules (never expires, can be cancelled)
+  if (o.created_by) return staffLinkUrl(o.retry_of || o.ref);
   const root = o.retry_of || o.ref;
   const open = (await db.query(
     "SELECT ref FROM shop.orders WHERE retry_of = $1 AND status = 'pending' AND pay_checkout_at IS NULL AND created_at > NOW(3) - INTERVAL $2 MINUTE ORDER BY id DESC LIMIT 1",
@@ -523,4 +530,88 @@ export async function sweep(limit = 20): Promise<number> {
     await settle(r.ref).catch(function (e) { console.error('[shop] sweep ' + r.ref + ':', e); });
   }
   return rows.length;
+}
+
+// ─── Payment links from the members app ───
+//
+// Staff (members app, Admin > Payment links) fill in the checkout's form for a buyer (app/api/staff,
+// lib/checkout placeOrder): the order keeps who made it (created_by) and until when it can be paid
+// (link_expires_at, 1 to 4 days), and the link /shop/link/<ref> goes to the buyer, by email too.
+// Opened again after its IFZA payment expired or was declined, the link starts a new payment as a
+// retry of the order (IFZA takes each reference once), with today's prices. Staff can cancel it
+// while unpaid; after link_expires_at it shows the "expired" page.
+
+/** The link staff send to the buyer. */
+export function staffLink(ref: string): string {
+  return config.publicUrl + '/shop/link/' + encodeURIComponent(ref);
+}
+
+type ChainOrder = { id: number; ref: string; status: string; pay_id: string | null; pay_checkout_at: unknown; pay_open: number | string | null };
+
+// the order and its retries, newest first
+async function chain(root: string): Promise<ChainOrder[]> {
+  return (await db.query(
+    'SELECT id, ref, status, pay_id, pay_checkout_at, (pay_expires_at > NOW(3) + INTERVAL 1 MINUTE) AS pay_open FROM shop.orders WHERE ref = $1 OR retry_of = $1 ORDER BY id DESC',
+    [root]
+  )).rows as ChainOrder[];
+}
+
+/**
+ * Where the payment link of a staff order goes now: paid (by any of its payments) the thank-you
+ * page; cancelled by staff the "cancelled" page; a card payment being decided, that payment; past
+ * link_expires_at the "expired" page; else the payment page of an order that can still be paid, a
+ * new retry when the last payment expired or failed. null when it isn't a staff order.
+ */
+export async function staffLinkUrl(ref: string): Promise<string | null> {
+  const o = (await db.query(
+    'SELECT *, (link_expires_at IS NULL OR link_expires_at > NOW(3)) AS link_open FROM shop.orders WHERE ref = $1 AND created_by IS NOT NULL AND retry_of IS NULL', [ref]
+  )).rows[0];
+  if (!o) return null;
+  const all = await chain(o.ref);
+  const paid = all.find(function (x) { return x.status === 'paid'; });
+  if (paid) return sitePage('paid', paid.ref);
+  if (o.staff_cancelled_at) return sitePage('cancel', o.ref);
+  const last = all[0];
+  if (last.status === 'pending' && last.pay_checkout_at) return payPage(last.ref);
+  if (!Number(o.link_open)) return sitePage('expired', o.ref);
+  // not paid yet, or its payment still open: that one
+  if (last.status === 'pending' && (!last.pay_id || Number(last.pay_open))) return payPage(last.ref);
+
+  const lastHour = Number((await db.query(
+    'SELECT COUNT(*) AS n FROM shop.orders WHERE retry_of = $1 AND created_at > NOW(3) - INTERVAL 1 HOUR', [o.ref]
+  )).rows[0].n);
+  if (lastHour >= 5) return config.altPaymentUrl;
+  const items: OrderItemRow[] = [];
+  for (const i of o.items as OrderItemRow[]) {
+    const p = product(i.productId);
+    if (!p) return config.altPaymentUrl;
+    items.push({ productId: p.id, name: p.name, price: p.price, quantity: i.quantity, tier: p.tier, codes: p.codes });
+  }
+  const amount = items.reduce(function (sum, i) { return sum + i.price * i.quantity; }, 0);
+  const next = newRef();
+  await db.query(
+    'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, retry_of, attribution, agency_code, created_by, link_expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+    [next, o.event_id, o.email, o.ip, JSON.stringify(o.buyer), JSON.stringify(items), amount.toFixed(2), config.currency, o.ref,
+      o.attribution == null ? null : (typeof o.attribution === 'string' ? o.attribution : JSON.stringify(o.attribution)), o.agency_code || null, o.created_by, o.link_expires_at]
+  );
+  console.info('[shop] order ' + next + ': payment link ' + o.ref + ' again');
+  return payPage(next);
+}
+
+/**
+ * Cancels a staff order's payment link: its unpaid orders become cancelled and the link shows the
+ * "cancelled" page. Not when paid, or while a card payment of it is being decided.
+ */
+export async function cancelStaffOrder(ref: string): Promise<'cancelled' | 'paid' | 'busy' | 'not_found'> {
+  return transaction(async function (c) {
+    const o = (await c.query('SELECT id, ref FROM shop.orders WHERE ref = $1 AND created_by IS NOT NULL AND retry_of IS NULL FOR UPDATE', [ref])).rows[0];
+    if (!o) return 'not_found';
+    const all = (await c.query('SELECT status, pay_checkout_at FROM shop.orders WHERE ref = $1 OR retry_of = $1 FOR UPDATE', [o.ref])).rows;
+    if (all.some(function (x) { return x.status === 'paid'; })) return 'paid';
+    if (all.some(function (x) { return x.status === 'pending' && x.pay_checkout_at; })) return 'busy';
+    await c.query("UPDATE shop.orders SET status = 'cancelled', updated_at = NOW(3) WHERE (ref = $1 OR retry_of = $1) AND status = 'pending'", [o.ref]);
+    await c.query('UPDATE shop.orders SET staff_cancelled_at = COALESCE(staff_cancelled_at, NOW(3)), updated_at = NOW(3) WHERE id = $1', [o.id]);
+    console.info('[shop] payment link ' + o.ref + ' cancelled');
+    return 'cancelled';
+  });
 }

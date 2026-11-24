@@ -7,7 +7,7 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import { ServerClient } from 'postmark';
 import { shopConfig as config } from './config';
-import { confirmed, failed, type Mail, type MailOrder } from './templates';
+import { confirmed, failed, paymentLink, type Mail, type MailOrder } from './templates';
 
 let transport: Transporter | null = null;
 let postmark: { token: string; client: ServerClient } | null = null;
@@ -51,4 +51,9 @@ export function paidEmail(to: string, o: MailOrder): Promise<boolean> {
 // after a declined or cancelled payment: "One more step to join us"
 export function notPaidEmail(to: string, o: MailOrder & { payUrl: string; altUrl: string }): Promise<boolean> {
   return send(to, failed(o));
+}
+
+// a payment link made by our team: "Complete your booking"
+export function paymentLinkEmail(to: string, o: MailOrder & { firstName: string; payUrl: string; total: string; expiresAt: Date }): Promise<boolean> {
+  return send(to, paymentLink(o));
 }

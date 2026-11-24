@@ -36,7 +36,7 @@ const PAGE = '/preregister/index.html';
 // with its visit count (api/visit)
 // with the ad platform tags' starter (tracking.js);
 // everything else, API included, goes to the pre-registration page.
-export const MAINTENANCE_PATHS = '/((?!_next/static|_next/image|assets/img/logo\\.png$|Api/Eventsnew/|shop/|preregister/|privacy$|api/preregister$|api/visit$|tracking\\.js$).*)';
+export const MAINTENANCE_PATHS = '/((?!_next/static|_next/image|assets/img/logo\\.png$|Api/Eventsnew/|shop/|preregister/|privacy$|api/preregister$|api/visit$|api/staff/|tracking\\.js$).*)';
 const closesForMaintenance = new RegExp('^' + MAINTENANCE_PATHS + '$');
 
 export function proxy(request: NextRequest) {

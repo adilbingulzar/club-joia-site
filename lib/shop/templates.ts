@@ -155,6 +155,30 @@ export type PreRegistration = {
   tier: string; source: string; message: string; marketing: boolean; consentAt: string;
 };
 
+const DUBAI = { timeZone: 'Asia/Dubai', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false } as const;
+
+/** The payment link our team made for a buyer (members app, Admin > Payment links). */
+export function paymentLink(o: MailOrder & { firstName: string; payUrl: string; total: string; expiresAt: Date }): Mail {
+  const until = new Intl.DateTimeFormat('en-GB', DUBAI).format(o.expiresAt) + ' (UAE time)';
+  const name = o.firstName ? 'Dear ' + o.firstName + ',' : 'Dear Guest,';
+  const body =
+    '<p style="' + P + '">' + esc(name) + '</p>\n' +
+    '<p style="' + P + 'margin-bottom:26px;">Thank you for your booking with Club JOIA 300. Your order is ready: please complete your payment using the secure link below.</p>\n' +
+    facts(o) +
+    rows([['Total', esc(o.total)]]) +
+    button(o.payUrl, 'Complete your payment') +
+    '<p style="' + P + '">This payment link is valid until <strong>' + esc(until) + '</strong>.</p>\n' +
+    '<p style="' + P + '">Once your payment is confirmed, you will receive your personalised entry ticket and arrival instructions by email within <strong>3 working days</strong>.</p>\n' +
+    assistance(o.phone);
+  return {
+    subject: 'Complete your booking – Club JOIA 300',
+    html: layout('Complete your booking', body, o.phone),
+    text: name + '\n\nThank you for your booking with Club JOIA 300. Your order is ready: please complete your payment using the secure link below.\n\n' +
+      textFacts(o) + 'Total: ' + o.total + '\n\nComplete your payment: ' + o.payUrl + '\nThis payment link is valid until ' + until + '.\n\n' +
+      'Once your payment is confirmed, you will receive your personalised entry ticket and arrival instructions by email within 3 working days.\n\n' + textEnd(o.phone)
+  };
+}
+
 export function preregisterGuest(r: PreRegistration, phone: string): Mail {
   const title = 'Thank you for pre-registering';
   const body =

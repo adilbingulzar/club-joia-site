@@ -137,6 +137,9 @@ async function migrate(): Promise<void> {
       retry_of         VARCHAR(64) NULL,                -- the order a retry came from
       attribution      JSON NULL,                       -- the ad campaign the buyer came from (lib/attribution.ts)
       agency_code      VARCHAR(50) NULL,                -- the agency (seller) code the buyer entered, optional
+      created_by       VARCHAR(191) NULL,               -- members app staff account (users.id) that made it as a payment link
+      staff_cancelled_at DATETIME(3) NULL,              -- that payment link cancelled by staff
+      link_expires_at  DATETIME(3) NULL,                -- that payment link can be paid until then
       created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       updated_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       paid_at          DATETIME(3) NULL,
@@ -148,6 +151,7 @@ async function migrate(): Promise<void> {
       KEY orders_ip (ip, created_at),
       KEY orders_retry_of (retry_of),
       KEY orders_agency (agency_code),
+      KEY orders_created_by (created_by, created_at),
       KEY orders_sweep (status, pay_checkout_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
     // the pre-registration page (lib/preregister.ts): one row per submission, the same email may come again
@@ -242,6 +246,18 @@ async function migrate(): Promise<void> {
   const agencyCol = await run(pool(),
     "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'shop_orders' AND column_name = 'agency_code' LIMIT 1");
   if (!agencyCol.rows.length) await run(pool(), 'ALTER TABLE shop.orders ADD COLUMN agency_code VARCHAR(50) NULL AFTER attribution, ADD KEY orders_agency (agency_code)');
+  // orders tables made before payment links from the members app
+  const staffCol = await run(pool(),
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'shop_orders' AND column_name = 'created_by' LIMIT 1");
+  if (!staffCol.rows.length) {
+    await run(pool(), `ALTER TABLE shop.orders
+      ADD COLUMN created_by VARCHAR(191) NULL AFTER agency_code,
+      ADD COLUMN staff_cancelled_at DATETIME(3) NULL AFTER created_by,
+      ADD KEY orders_created_by (created_by, created_at)`);
+  }
+  const expiryCol = await run(pool(),
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'shop_orders' AND column_name = 'link_expires_at' LIMIT 1");
+  if (!expiryCol.rows.length) await run(pool(), 'ALTER TABLE shop.orders ADD COLUMN link_expires_at DATETIME(3) NULL AFTER staff_cancelled_at');
   // tables made before one row per submission: email was unique there
   const unique = await run(pool(),
     "SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'pre_registrations' AND index_name = 'registrations_email' AND non_unique = 0 LIMIT 1");
