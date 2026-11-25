@@ -14,7 +14,7 @@ const SLIDES: Slide[] = [
   { src: '/assets/slides/new/1.jpg', pos: '50% 62%' }, // yacht + F1
   { src: '/assets/slides/2026/party-1080x1440.mp4', wide: '/assets/slides/2026/party-1920x1080.mp4', video: true }, // party
   { src: '/assets/slides/new/3.jpg', pos: '75% 16%' }, // Black Coffee: face and name
-  { src: '/assets/slides/new/4.mp4', video: true }, // race, then the food
+  { src: '/assets/slides/2026/dining-1080x1440.mp4', wide: '/assets/slides/2026/dining-1920x1080.mp4', video: true }, // dining: steak, caviar
   { src: '/assets/slides/new/5.jpg', pos: '50% 35%' }, // guest
   { src: '/assets/slides/new/6.jpg', pos: '78% 18%' }, // Gordo: face and name (the name runs near the right edge)
   { src: '/assets/slides/2026/food-1080x1440.mp4', wide: '/assets/slides/2026/food-1920x1080.mp4', video: true }, // food skewers, chef
