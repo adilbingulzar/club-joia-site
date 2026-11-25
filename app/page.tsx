@@ -8,8 +8,8 @@ import Price from '@/components/Price';
 import GalleryVideo from '@/components/GalleryVideo';
 
 export const metadata: Metadata = {
-  title: 'Club JOIA 300 | Abu Dhabi Grand Prix, December 4, 5 & 6',
-  description: 'Club JOIA 300: the exclusive trackside mega yacht experience at the Abu Dhabi Grand Prix, December 4, 5 & 6. Open bar, fine dining, DJs and track views.'
+  title: 'CLUB JOIA 300 · Book your ticket now · Abu Dhabi Grand Prix',
+  description: 'The exclusive trackside mega yacht experience at the Abu Dhabi Grand Prix, December 4, 5 & 6. Open bar, fine dining, DJs and track views. Book your ticket now.'
 };
 
 // Previous editions: a highlights film and four photos a year (public/assets/gallery/<year>/)
