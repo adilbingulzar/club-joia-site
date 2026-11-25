@@ -53,9 +53,7 @@ const ultraPerks = pearlyPerks.concat([
   'VIP after-party sundeck access',
   'Chauffeur transfers with a dedicated driver, or VIP parking',
   'Premium plus beverages during the after-party',
-  'Personal concierge',
-  'Hair and make-up',
-  'Shoulder and foot massage'
+  'Personal concierge'
 ]);
 
 const tiers: Tier[] = [
@@ -76,7 +74,7 @@ const tiers: Tier[] = [
   {
     id: 'ultra-black', name: 'Ultra Black', swatch: 'black', page: '/ultra-black',
     card: '/assets/img/cards/ultra-black.webp',
-    intro: 'The top tier: everything in Pearly White, plus VIP after-party sundeck access, a dedicated chauffeur or VIP parking, premium plus beverages during the after-party, a personal concierge, hair and make-up, and shoulder and foot massages.',
+    intro: 'The top tier: everything in Pearly White, plus VIP after-party sundeck access, a dedicated chauffeur or VIP parking, premium plus beverages during the after-party and a personal concierge.',
     perks: ultraPerks, newFrom: pearlyPerks.length,
     prices: { '3-days': 15000, 'sat': 6500, 'sun': 9000 }
   }
