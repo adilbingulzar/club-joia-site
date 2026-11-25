@@ -180,7 +180,7 @@ export default function Home() {
                 <div key={g.year}>
                   <h3 className="gal-year">{g.year}</h3>
                   <div className="gallery">
-                    <figure className="ph ph-video filled"><GalleryVideo src={dir + 'video.mp4'} poster={dir + 'poster.jpg'} label={g.year + ' highlights film'} /></figure>
+                    <figure className="ph ph-video filled"><GalleryVideo src={dir + 'video-v2.mp4'} poster={dir + 'poster-v2.jpg'} label={g.year + ' highlights film'} /></figure>
                     {g.photos.map(function (alt, i) {
                       return <figure className="ph filled" key={i}><img src={dir + (i + 1) + '.jpg'} alt={alt} width="1000" height="1250" loading="lazy" /></figure>;
                     })}
