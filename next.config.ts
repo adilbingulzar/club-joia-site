@@ -16,14 +16,27 @@ export const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
-  turbopack: { root: __dirname },
+  turbopack: {
+    root: __dirname,
+    // Tailwind for the members' pages only (app/(member)/member.tw.css); the site's own CSS is plain
+    rules: { '*.tw.css': { loaders: ['@tailwindcss/turbopack'], as: '*.css' } }
+  },
+  // unknown addresses get the site's 404 page apart from the layouts (app/global-not-found.tsx), so the
+  // site's styles stay off the members' pages
+  experimental: {
+    globalNotFound: true,
+    // the members' forms send files: a profile photo (5 MB) or a concierge attachment (8 MB), as in the members app
+    serverActions: { bodySizeLimit: '10mb' }
+  },
   // no "X-Powered-By: Next.js"
   poweredByHeader: false,
   async headers() {
     return [
       { source: '/:path*', headers: SECURITY_HEADERS },
       // later rules win for the same header
-      { source: '/shop/return/:ref', headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }] }
+      { source: '/shop/return/:ref', headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }] },
+      // the members' service worker lives at the root but works for /account only, and is never cached stale
+      { source: '/member-sw.js', headers: [{ key: 'Service-Worker-Allowed', value: '/account' }, { key: 'Cache-Control', value: 'no-cache' }] }
     ];
   },
   // the ticket shop's email (pg and @node-rs/argon2 are left out of the bundle by Next itself)

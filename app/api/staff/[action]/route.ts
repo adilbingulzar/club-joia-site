@@ -6,6 +6,10 @@
  *   POST catalog                                   -> { currency, maxPerTicket, tickets: [{ id, name, price, soldOut }], countries: [{ code, name, dial }] }
  *   POST order   { createdBy, buyer, items, linkDays: 1 to 5, sendEmail } -> { ref, url, amount, currency, expiresAt, emailed } or 400 { error }
  *   POST cancel  { ref }                           -> { result: cancelled | paid | busy | not_found }
+ *   POST make-member { ref, createdBy }            -> { memberId, userId, membershipNumber, newMember, pendingActivation, tickets, notes }
+ *                                                     or 400 { error } (not paid, already a member, a staff email) / 404
+ * make-member: Admin > Sales "Make member" (lib/shop/fulfil.ts makeMember), the buyer of a paid order as
+ * a member with its tier and tickets; createdBy is the staff user, in the audit log.
  * buyer and items as the site's checkout (lib/checkout.ts). sendEmail: the link goes to the buyer
  * by email too ("Complete your booking", lib/shop/templates.ts paymentLink).
  */
@@ -14,6 +18,7 @@ import { countries } from '@/lib/countries';
 import { getCatalog } from '@/lib/catalog';
 import { CheckoutError, placeOrder, readBuyer } from '@/lib/checkout';
 import { cancelStaffOrder, staffLink } from '@/lib/shop/orders';
+import { makeMember } from '@/lib/shop/fulfil';
 import { db } from '@/lib/shop/db';
 import { shopConfig } from '@/lib/shop/config';
 import { paymentLinkEmail } from '@/lib/shop/email';
@@ -62,7 +67,19 @@ async function order(body: Record<string, unknown>) {
   }
 }
 
+async function makeMemberCall(body: Record<string, unknown>) {
+  const createdBy = typeof body.createdBy === 'string' ? body.createdBy.trim().slice(0, 191) : '';
+  if (!createdBy) return json({ error: 'Who made the member is missing.' }, 400);
+  const r = await makeMember(String(body.ref || '').slice(0, 64), createdBy);
+  if (r === 'not_found') return json({ error: 'Order not found.' }, 404);
+  if (r === 'not_paid') return json({ error: 'This order isn’t paid, so its buyer can’t be made a member yet.' }, 400);
+  if (r === 'done') return json({ error: 'This order’s buyer is already a member.' }, 400);
+  if (r === 'staff_email') return json({ error: 'This order’s email belongs to a staff account, so it can’t be a member. Ask the buyer for another email.' }, 400);
+  return json(r);
+}
+
 const CALLS: Record<string, (body: Record<string, unknown>) => Promise<Response>> = {
+  'make-member': makeMemberCall,
   catalog: async function () { return json(await catalog()); },
   order: order,
   cancel: async function (body) { return json({ result: await cancelStaffOrder(String(body.ref || '').slice(0, 64)) }); }

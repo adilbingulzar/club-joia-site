@@ -1,7 +1,7 @@
 /*
  * End-to-end test of the ticket shop's APIs (app/Api/Eventsnew, app/shop, app/api/pay) on a real
  * database with a stand-in IFZA: the site's calls, the payment (create, card, bank check's return,
- * status sweep), the member and tickets made, the emails, retry, and the sales dashboard's API.
+ * status sweep), the emails, the member and tickets made by staff (Make member), retry, and the sales dashboard's API.
  * Removes what it made.
  *
  * Needs a local or test copy of the members app's MySQL database (never the live one), with the
@@ -210,6 +210,11 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
   // shared across the steps, in order
   let ref1 = '', ref2 = '', ref3 = '', ref3b = '', ref4 = '';
   let memberId = '';
+  // the members app's server: Admin > Sales "Make member" and payment links (app/api/staff)
+  const staffCall = async function (action: string, body: unknown) {
+    const r = await routes.staff.POST(new Request(SITE + '/api/staff/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ADMIN_KEY }, body: JSON.stringify(body) }), { params: Promise.resolve({ action }) });
+    return { status: r.status, body: await r.json() };
+  };
 
   it('answers the site\'s calls', async function () {
     const events = (await api('buyTicketsEvents', { vendorId: '40' })).body;
@@ -242,7 +247,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect((await order([['ruby-red/3-days', 11]])).body.status).toBe('0');
   });
 
-  it('order 1: new buyer pays, becomes a member with the tickets', async function () {
+  it('order 1: new buyer pays; staff make the member, with the tickets', async function () {
     const o1 = await order([['ruby-red/3-days', 2], ['pearly-white/sat', 1]]);
     expect(o1.body.status).toBe('1');
     expect(o1.body.paymentUrl).toMatch(/^http:\/\/site\.test\/shop\/pay\//);
@@ -282,7 +287,10 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     const done = await one('SELECT * FROM shop.orders WHERE ref = $1', [ref1]);
     expect(done).toMatchObject({ status: 'paid', error: null });
     expect(done.fulfilled_at).toBeTruthy();
-    expect(done.tickets).toHaveLength(9);
+    // paying makes no member: staff do, from Admin > Sales
+    expect(done.member_id).toBeNull();
+    expect(done.tickets).toBeNull();
+    expect((await one('SELECT COUNT(*) AS n FROM users WHERE email = $1', [email])).n).toBe(0);
 
     // every IFZA call is in the payment logs, with IFZA's answer; the card token never is
     const logs = (await pool.query('SELECT call_name, reference, payment_id, http_status, request, response FROM shop.payment_logs WHERE reference = $1 OR payment_id = $2 ORDER BY id', [ref1, p1.id])).rows;
@@ -295,6 +303,18 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect(logs.filter(function (l) { return l.call_name === 'status'; }).length).toBeGreaterThanOrEqual(4);
     expect(JSON.stringify(logs)).not.toContain('tok_ok');
     expect(JSON.stringify(logs)).not.toContain(IFZA_KEY);
+
+    // Make member: only with the key, only a paid order, and once
+    expect((await staffCall('make-member', { ref: ref1 })).status).toBe(400);
+    expect((await staffCall('make-member', { ref: 'CJNOSUCHORDER', createdBy: 'staff-test-user' })).status).toBe(404);
+    const staffId = (await one("SELECT id FROM users WHERE role IN ('SUPER_ADMIN', 'ADMIN') ORDER BY created_at LIMIT 1", [])).id;
+    const made = await staffCall('make-member', { ref: ref1, createdBy: staffId });
+    expect(made.status).toBe(200);
+    expect(made.body).toMatchObject({ newMember: true, pendingActivation: true, tickets: 9, notes: [] });
+    expect((await staffCall('make-member', { ref: ref1, createdBy: staffId })).body.error).toBe('This order’s buyer is already a member.');
+    expect((await one('SELECT tickets FROM shop.orders WHERE ref = $1', [ref1])).tickets).toHaveLength(9);
+    // who did it is in the audit log
+    expect((await one("SELECT actor_user_id FROM audit_logs WHERE action = 'shop.order_member' AND entity_id = $1", [ref1])).actor_user_id).toBe(staffId);
 
     const user = await one('SELECT * FROM users WHERE email = $1', [email]);
     expect(user).toMatchObject({ role: 'MEMBER', status: 'PENDING_ACTIVATION' });
@@ -316,7 +336,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     });
     expect((await one('SELECT COUNT(*) AS n FROM ticket_credentials c JOIN tickets t ON t.id = c.ticket_id WHERE t.member_id = $1 AND c.revoked_at IS NULL', [member.id])).n).toBe(9);
 
-    // a second return (or the sweep) makes nothing twice
+    // a second return (or the sweep) makes nothing twice, nor sends the email again
     expect((await get(back(ref1))).location).toBe(SITE + '/thank-you?orderid=' + ref1);
     expect((await one('SELECT COUNT(*) AS n FROM tickets WHERE member_id = $1', [member.id])).n).toBe(9);
     expect((await card(ref1)).body).toEqual({ page: SITE + '/thank-you?orderid=' + ref1 });
@@ -341,6 +361,9 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect(await sweep(100)).toBeGreaterThanOrEqual(1);
     expect(await one('SELECT status, fulfilled_at IS NOT NULL AS done FROM shop.orders WHERE ref = $1', [ref2])).toEqual({ status: 'paid', done: 1 });
     expect((await get(back(ref2))).location).toBe(SITE + '/thank-you?orderid=' + ref2);
+    // paid, not a member's yet: Make member adds it to the member of that email, upgraded
+    expect(await one('SELECT member_id FROM shop.orders WHERE ref = $1', [ref2])).toEqual({ member_id: null });
+    expect((await staffCall('make-member', { ref: ref2, createdBy: 'staff-test-user' })).body).toMatchObject({ memberId: memberId, newMember: false, tickets: 3 });
     expect((await one('SELECT COUNT(*) AS n FROM users WHERE lower(email) = lower($1)', [email])).n).toBe(1);
     const ms = (await pool.query('SELECT t.slug FROM memberships m JOIN membership_tiers t ON t.id = m.tier_id WHERE member_id = $1', [memberId])).rows;
     expect(ms).toEqual([{ slug: 'ultra-black' }]);

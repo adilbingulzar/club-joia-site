@@ -1,10 +1,8 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PageHeader, Footer } from '@/components/SiteNav';
 
-export const metadata: Metadata = { title: 'Page Not Found | Club JOIA 300', robots: { index: false } };
-
-export default function NotFound() {
+/* The site's 404 page (app/global-not-found.tsx for unknown addresses, app/(site)/not-found.tsx inside the site's pages). */
+export default function NotFoundPage() {
   return (
     <>
       <PageHeader />

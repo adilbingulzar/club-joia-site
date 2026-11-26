@@ -1,12 +1,8 @@
 import type { Metadata, Viewport } from 'next';
-import './globals.css';
-import { getCatalog } from '@/lib/catalog';
-import { CatalogProvider } from '@/lib/prices';
-import Tracking from '@/components/Tracking';
-
-// Prices come from Alfred (lib/catalog), so pages are rendered per request, not at build time.
-// The catalogue is handed over unresolved, the page doesn't wait for it.
-// Rendering per request is also what puts the request's nonce on Next.js's scripts (lib/csp.ts).
+// Pages are rendered per request, not at build time: prices are live (lib/catalog), and rendering per
+// request is what puts the request's nonce on Next.js's scripts (lib/csp.ts).
+// The styles come with each group's layout: the site's (app/(site)/globals.css) and the members' (app/(member)),
+// so neither affects the other.
 export const dynamic = 'force-dynamic';
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
@@ -24,11 +20,10 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const catalog = getCatalog();
   return (
-    // data-scroll-behavior lets Next.js turn off the smooth scrolling from globals.css during page changes.
+    // data-scroll-behavior lets Next.js turn off the smooth scrolling from the site's globals.css during page changes.
     <html lang="en" data-scroll-behavior="smooth">
-      <body><CatalogProvider catalog={catalog}>{children}</CatalogProvider><Tracking /></body>
+      <body>{children}</body>
     </html>
   );
 }

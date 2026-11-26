@@ -1,0 +1,44 @@
+{
+  "id": "/account",
+  "name": "CLUB JOIA 300",
+  "short_name": "JOIA 300",
+  "description": "Your private CLUB JOIA 300 membership.",
+  "start_url": "/account",
+  "scope": "/account",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "categories": [
+    "lifestyle",
+    "travel"
+  ],
+  "icons": [
+    {
+      "src": "/assets/img/icon-v2-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/img/icon-v2-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "My tickets",
+      "url": "/account/tickets"
+    },
+    {
+      "name": "Membership card",
+      "url": "/account/card"
+    },
+    {
+      "name": "Concierge",
+      "url": "/account/concierge"
+    }
+  ]
+}

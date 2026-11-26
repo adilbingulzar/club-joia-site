@@ -20,6 +20,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { allowlistVerdict } from '@/lib/ip-allowlist';
 import { contentSecurityPolicy, newNonce } from '@/lib/csp';
+import { MEMBER_COOKIE } from '@/lib/members-cookie';
 import { ATTRIBUTION_COOKIE, ATTRIBUTION_MAX_AGE, encodeAttribution, fromVisit } from '@/lib/attribution';
 
 const PARAM = 'dev';
@@ -74,6 +75,12 @@ function answer(request: NextRequest, pass: { request: { headers: Headers } }): 
     res.cookies.set(COOKIE, '', { httpOnly: true, secure: request.nextUrl.protocol === 'https:', sameSite: 'lax', path: '/', maxAge: 0 });
     res.headers.set('Cache-Control', 'no-store');
     return res;
+  }
+  // the member's pages without a session cookie: the sign-in first (the pages check the session itself too)
+  if (/^\/account(\/|$)/.test(request.nextUrl.pathname) && !request.cookies.get(MEMBER_COOKIE)?.value) {
+    const login = new URL('/login', request.url);
+    if (request.nextUrl.pathname !== '/account') login.searchParams.set('next', request.nextUrl.pathname + request.nextUrl.search);
+    return NextResponse.redirect(login);
   }
   if (process.env.MAINTENANCE_MODE !== 'true') return NextResponse.next(pass);
   if (!closesForMaintenance.test(request.nextUrl.pathname)) return NextResponse.next(pass);

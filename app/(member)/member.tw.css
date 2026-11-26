@@ -1,0 +1,153 @@
+/*
+ * The members' pages (app/(member)): the members app's styles (club-joia-300-backend src/app/globals.css)
+ * in its light look, as on the members app's own site: white background, dark text. Parts that stay dark
+ * (the event hero, ...) take the class "on-dark", which puts the dark colours back.
+ * Only the members' layout loads this file, so the site's own pages (app/(site)/globals.css) are untouched.
+ */
+@import "tailwindcss" source(none);
+@source "../../member";
+@source ".";
+
+/*
+ * CLUB JOIA 300 — design tokens as Tailwind theme variables.
+ * Mirrors src/styles/design-tokens.ts (canonical). Change both together.
+ */
+@theme {
+  --color-ink: #ffffff;
+  --color-ultra: #0b0b0c;
+  --color-surface: #f3f2ef;
+  --color-surface-raised: #eae9e5;
+  --color-line: rgb(10 10 10 / 0.1);
+
+  --color-pearl: #0a0a0a;
+  --color-pearl-muted: #45433f;
+  --color-pearl-dim: #6b6862;
+  --color-paper: #fbfaf7;
+
+  --color-ruby: #ef233c;
+  --color-ruby-deep: #a3101f;
+  --color-ruby-ink: #5a0611;
+
+  --color-silver: #c9ccd1;
+  --color-silver-dark: #8e9299;
+
+  --color-success: #22a06b;
+  --color-warning: #e8a23a;
+  --color-danger: #e5383b;
+
+  --font-display: var(--font-display-family), "Cormorant Garamond", Georgia, serif;
+  --font-sans: var(--font-sans-family), "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 18px;
+  --tracking-luxe: 0.28em;
+  --tracking-label: 0.16em;
+
+  --shadow-card: 0 30px 60px -24px rgb(0 0 0 / 0.35), 0 18px 36px -20px rgb(0 0 0 / 0.25);
+  --shadow-soft: 0 10px 30px -12px rgb(0 0 0 / 0.45);
+
+  --animate-sheen: sheen 7s ease-in-out infinite;
+  --animate-fade-up: fade-up 0.5s ease-out both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+
+  @keyframes sheen {
+    0%, 55% { transform: translateX(-60%); }
+    85%, 100% { transform: translateX(60%); }
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes shimmer {
+    from { background-position: -200% 0; }
+    to { background-position: 200% 0; }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-ink text-pearl font-sans antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ruby);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+  ::selection {
+    background: var(--color-ruby);
+    color: white;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[var(--tracking-luxe)] text-pearl-dim;
+  }
+  .display {
+    @apply font-display font-medium leading-[0.95] tracking-tight;
+  }
+  .hairline {
+    @apply border-line;
+  }
+  .skeleton {
+    background: linear-gradient(90deg, rgb(255 255 255 / 0.04) 25%, rgb(255 255 255 / 0.09) 50%, rgb(255 255 255 / 0.04) 75%);
+    background-size: 200% 100%;
+    @apply animate-shimmer rounded-md;
+  }
+  .admin .skeleton {
+    background: linear-gradient(90deg, rgb(0 0 0 / 0.04) 25%, rgb(0 0 0 / 0.08) 50%, rgb(0 0 0 / 0.04) 75%);
+    background-size: 200% 100%;
+  }
+  .safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+  }
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  /* Brushed-metal micro texture for membership cards */
+  .metal-texture {
+    background-image: repeating-linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0.025) 0px,
+      rgb(255 255 255 / 0.025) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    mix-blend-mode: overlay;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* The dark colours, for parts that stay dark in the light look (the members app's own site does the same). */
+.on-dark {
+  --color-ink: #050505;
+  --color-ultra: #0b0b0c;
+  --color-surface: #111113;
+  --color-surface-raised: #18181b;
+  --color-line: rgb(245 243 238 / 0.1);
+  --color-pearl: #f5f3ee;
+  --color-pearl-muted: #bdb9b0;
+  --color-pearl-dim: #8f8b82;
+}
+
+/*
+ * The fonts (next/font in app/(member)/layout.tsx) are set on the members' wrapper, not on <html> as in
+ * the members app, so the font tokens are resolved there again.
+ */
+.member-root {
+  --font-display: var(--font-display-family), "Cormorant Garamond", Georgia, serif;
+  --font-sans: var(--font-sans-family), "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
+}
