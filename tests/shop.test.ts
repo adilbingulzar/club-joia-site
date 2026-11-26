@@ -485,7 +485,7 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect(made.status).toBe(200);
     const ref = made.body.ref;
     // emailed (here the console driver only writes it to the log, so not "delivered")
-    expect(made.body).toEqual({ ref, url: SITE + '/shop/link/' + ref, amount: 6000, currency: 'USD', expiresAt: expect.any(String), emailed: false });
+    expect(made.body).toEqual({ ref, url: SITE + '/shop/link/' + ref, amount: 6000, discount: 0, currency: 'USD', expiresAt: expect.any(String), emailed: false });
     const days = (Date.parse(made.body.expiresAt) - Date.now()) / 86400000;
     expect(days).toBeGreaterThan(1.99);
     expect(days).toBeLessThan(2.01);
@@ -539,6 +539,27 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect((await get(paid.body.url)).location).toBe(SITE + '/thank-you?orderid=' + paid.body.ref);
     // a website order isn't a payment link
     expect((await get(SITE + '/shop/link/' + ref1)).status).toBe(404);
+
+    // a discount: a fixed amount off the tickets, on the email, the payment page and its retries
+    const before = mails.length;
+    const off = await staff('order', { createdBy: 'staff-test-user', buyer: linkBuyer(to), items: [{ id: 'ruby-red/sat', quantity: 2 }], discount: 250.5, sendEmail: true });
+    expect(off.status).toBe(200);
+    expect(off.body).toMatchObject({ amount: 5749.5, discount: 250.5 });
+    expect(await one('SELECT amount, discount FROM shop.orders WHERE ref = $1', [off.body.ref])).toEqual({ amount: '5749.50', discount: '250.50' });
+    const offMail = mails.slice(before).join('\n');
+    expect(offMail).toMatch(/Tickets: .*6,000/);
+    expect(offMail).toMatch(/Discount: −.*250\.5/);
+    expect(offMail).toMatch(/Total: .*5,749\.5/);
+    expect(await payState(off.body.ref)).toMatchObject({ state: 'ready', amount: 5749.5, discount: 250.5 });
+    await pool.query('UPDATE shop.orders SET pay_expires_at = UTC_TIMESTAMP(3) - INTERVAL 1 MINUTE WHERE ref = $1', [off.body.ref]);
+    const offAgain = decodeURIComponent(String((await get(off.body.url)).location).split('/pay/')[1]);
+    expect(await one('SELECT retry_of, amount, discount FROM shop.orders WHERE ref = $1', [offAgain])).toEqual({ retry_of: off.body.ref, amount: '5749.50', discount: '250.50' });
+    // not the whole total, not below 0, at most 2 decimals; none: no discount column value
+    expect((await staff('order', { createdBy: 'staff-test-user', buyer: linkBuyer(to), items: [{ id: 'ruby-red/sat', quantity: 1 }], discount: 3000 })).body)
+      .toEqual({ error: 'The discount must be less than the tickets’ total.' });
+    expect((await staff('order', { createdBy: 'staff-test-user', buyer: linkBuyer(to), items: [{ id: 'ruby-red/sat', quantity: 1 }], discount: -5 })).status).toBe(400);
+    expect((await staff('order', { createdBy: 'staff-test-user', buyer: linkBuyer(to), items: [{ id: 'ruby-red/sat', quantity: 1 }], discount: 1.234 })).status).toBe(400);
+    expect(await one('SELECT discount FROM shop.orders WHERE ref = $1', [late.body.ref])).toEqual({ discount: null });
   });
 
   it('limits unpaid orders per email (50) and per address (50) in an hour', async function () {

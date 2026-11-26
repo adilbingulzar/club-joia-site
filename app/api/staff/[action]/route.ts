@@ -4,7 +4,8 @@
  * buyer pays through /shop/link/<ref> (lib/shop/orders.ts staffLinkUrl).
  * Only the members app's server calls it, with SHOP_ADMIN_KEY (lib/shop/key.ts). JSON in and out:
  *   POST catalog                                   -> { currency, maxPerTicket, tickets: [{ id, name, price, soldOut }], countries: [{ code, name, dial }] }
- *   POST order   { createdBy, buyer, items, linkDays: 1 to 5, sendEmail } -> { ref, url, amount, currency, expiresAt, emailed } or 400 { error }
+ *   POST order   { createdBy, buyer, items, linkDays: 1 to 5, discount?, sendEmail } -> { ref, url, amount, discount, currency, expiresAt, emailed } or 400 { error }
+ *                discount: a fixed amount off the tickets (0 or more, 2 decimals at most); the total stays at least 1
  *   POST cancel  { ref }                           -> { result: cancelled | paid | busy | not_found }
  *   POST make-member { ref, createdBy }            -> { memberId, userId, membershipNumber, newMember, pendingActivation, tickets, notes }
  *                                                     or 400 { error } (not paid, already a member, a staff email) / 404
@@ -47,8 +48,13 @@ async function order(body: Record<string, unknown>) {
     const raw = body.buyer as Record<string, unknown>;
     const buyer = readBuyer({ ...raw, repeatEmail: raw.email });
     const linkDays = [1, 2, 3, 4, 5].indexOf(Number(body.linkDays)) >= 0 ? Number(body.linkDays) : 1;
-    const ref = await placeOrder(buyer, body.items, { createdBy, linkDays });
-    const o = (await db.query('SELECT amount, currency, items, event_id, link_expires_at FROM shop.orders WHERE ref = $1', [ref])).rows[0];
+    const discount = body.discount == null || body.discount === '' ? 0 : Number(body.discount);
+    if (!Number.isFinite(discount) || discount < 0 || discount > 1e7 || Math.abs(Math.round(discount * 100) - discount * 100) > 1e-6) {
+      throw new CheckoutError('The discount must be an amount of 0 or more, with at most 2 decimals.');
+    }
+    const ref = await placeOrder(buyer, body.items, { createdBy, linkDays, discount });
+    const o = (await db.query('SELECT amount, discount, currency, items, event_id, link_expires_at FROM shop.orders WHERE ref = $1', [ref])).rows[0];
+    const off = Number(o.discount || 0);
     const url = staffLink(ref);
     const expiresAt = new Date(o.link_expires_at);
     let emailed = false;
@@ -56,11 +62,12 @@ async function order(body: Record<string, unknown>) {
       const event = (await db.query('SELECT name, metadata, start_date AS start_day, end_date AS end_day FROM events WHERE id = $1', [o.event_id])).rows[0] || {};
       emailed = await paymentLinkEmail(buyer.email, {
         firstName: buyer.firstName, payUrl: url, total: money(Number(o.amount), String(o.currency)), expiresAt,
+        subtotal: off ? money(Number(o.amount) + off, String(o.currency)) : undefined, discount: off ? money(off, String(o.currency)) : undefined,
         eventName: event.name || '', eventStart: event.start_day, eventEnd: event.end_day,
         items: typeof o.items === 'string' ? JSON.parse(o.items) : o.items, phone: shopConfig.supportPhone(event)
       });
     }
-    return json({ ref, url, amount: Number(o.amount), currency: String(o.currency), expiresAt: expiresAt.toISOString(), emailed });
+    return json({ ref, url, amount: Number(o.amount), discount: off, currency: String(o.currency), expiresAt: expiresAt.toISOString(), emailed });
   } catch (e) {
     if (e instanceof CheckoutError) return json({ error: e.message }, 400);
     throw e;

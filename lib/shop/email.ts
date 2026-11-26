@@ -54,6 +54,6 @@ export function notPaidEmail(to: string, o: MailOrder & { payUrl: string; altUrl
 }
 
 // a payment link made by our team: "Complete your booking"
-export function paymentLinkEmail(to: string, o: MailOrder & { firstName: string; payUrl: string; total: string; expiresAt: Date }): Promise<boolean> {
+export function paymentLinkEmail(to: string, o: MailOrder & { firstName: string; payUrl: string; total: string; expiresAt: Date; subtotal?: string; discount?: string }): Promise<boolean> {
   return send(to, paymentLink(o));
 }

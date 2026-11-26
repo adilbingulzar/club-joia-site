@@ -77,7 +77,7 @@ async function ticketIds(): Promise<Record<string, string>> {
  * createdBy: the members app staff account that made it (a payment link), which has no such limit,
  * payable for linkDays days.
  */
-export async function placeOrder(buyer: Buyer, items: unknown, extra: { ip?: string; attribution?: string; createdBy?: string; linkDays?: number } = {}): Promise<string> {
+export async function placeOrder(buyer: Buyer, items: unknown, extra: { ip?: string; attribution?: string; createdBy?: string; linkDays?: number; discount?: number } = {}): Promise<string> {
   if (!Array.isArray(items) || !items.length) throw new CheckoutError('Your order is empty.');
   const buyerCountry = country(buyer.country)!;
   const catalog = await getCatalog();
@@ -114,7 +114,7 @@ export async function placeOrder(buyer: Buyer, items: unknown, extra: { ip?: str
     form['tickets[' + i + '][quantity]'] = String(quantity);
   });
 
-  const res = await buyTickets(form, extra.createdBy ? { createdBy: extra.createdBy, linkDays: extra.linkDays } : {});
+  const res = await buyTickets(form, extra.createdBy ? { createdBy: extra.createdBy, linkDays: extra.linkDays, discount: extra.discount } : {});
   if (res.status === '1' && res.orderId) return res.orderId;
   // the shop's messages are written for buyers (sold out, unfinished orders, ...)
   throw new CheckoutError(res && res.message ? String(res.message) : 'We couldn’t start the payment. Please try again in a moment.');

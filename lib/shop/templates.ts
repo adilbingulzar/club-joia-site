@@ -158,14 +158,16 @@ export type PreRegistration = {
 const DUBAI = { timeZone: 'Asia/Dubai', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false } as const;
 
 /** The payment link our team made for a buyer (members app, Admin > Payment links). */
-export function paymentLink(o: MailOrder & { firstName: string; payUrl: string; total: string; expiresAt: Date }): Mail {
+export function paymentLink(o: MailOrder & { firstName: string; payUrl: string; total: string; expiresAt: Date; subtotal?: string; discount?: string }): Mail {
+  // with a discount: the tickets, the discount, then the total
+  const sums: [string, string][] = o.discount ? [['Tickets', o.subtotal || ''], ['Discount', '−' + o.discount], ['Total', o.total]] : [['Total', o.total]];
   const until = new Intl.DateTimeFormat('en-GB', DUBAI).format(o.expiresAt) + ' (UAE time)';
   const name = o.firstName ? 'Dear ' + o.firstName + ',' : 'Dear Guest,';
   const body =
     '<p style="' + P + '">' + esc(name) + '</p>\n' +
     '<p style="' + P + 'margin-bottom:26px;">Thank you for your booking with Club JOIA 300. Your order is ready: please complete your payment using the secure link below.</p>\n' +
     facts(o) +
-    rows([['Total', esc(o.total)]]) +
+    rows(sums.map(function (r) { return [r[0], esc(r[1])] as [string, string]; })) +
     button(o.payUrl, 'Complete your payment') +
     '<p style="' + P + '">This payment link is valid until <strong>' + esc(until) + '</strong>.</p>\n' +
     '<p style="' + P + '">Once your payment is confirmed, you will receive your personalised entry ticket and arrival instructions by email within <strong>3 working days</strong>.</p>\n' +
@@ -174,7 +176,7 @@ export function paymentLink(o: MailOrder & { firstName: string; payUrl: string; 
     subject: 'Complete your booking – Club JOIA 300',
     html: layout('Complete your booking', body, o.phone),
     text: name + '\n\nThank you for your booking with Club JOIA 300. Your order is ready: please complete your payment using the secure link below.\n\n' +
-      textFacts(o) + 'Total: ' + o.total + '\n\nComplete your payment: ' + o.payUrl + '\nThis payment link is valid until ' + until + '.\n\n' +
+      textFacts(o) + sums.map(function (r) { return r[0] + ': ' + r[1]; }).join('\n') + '\n\nComplete your payment: ' + o.payUrl + '\nThis payment link is valid until ' + until + '.\n\n' +
       'Once your payment is confirmed, you will receive your personalised entry ticket and arrival instructions by email within 3 working days.\n\n' + textEnd(o.phone)
   };
 }

@@ -154,13 +154,16 @@ function payLink(ref: string): string {
 // buyTickets: { status: '1', paymentUrl, orderId } or { status: '0', message } for the buyer
 // opts.createdBy: the members app staff account (users.id) making it as a payment link (lib/checkout
 // placeOrder from app/api/staff): no limit on unpaid orders, and it can be paid for opts.linkDays days
-export async function buyTickets(body: Record<string, string>, opts: { createdBy?: string; linkDays?: number } = {}) {
+export async function buyTickets(body: Record<string, string>, opts: { createdBy?: string; linkDays?: number; discount?: number } = {}) {
   try {
     if (!ifza.configured()) throw new BuyerError('Online payment isn’t set up yet. Please contact us to complete your booking.');
     const e = await saleEvent();
     if (!e) throw new BuyerError('Tickets aren’t on sale at the moment.');
     const order = readOrder(body);
-    const amount = order.items.reduce(function (s, i) { return s + i.price * i.quantity; }, 0);
+    // a payment link's discount (staff only): a fixed amount off the tickets, the total stays at least 1
+    const discount = opts.createdBy && opts.discount ? opts.discount : 0;
+    const amount = order.items.reduce(function (s, i) { return s + i.price * i.quantity; }, 0) - discount;
+    if (amount < 1) throw new BuyerError('The discount must be less than the tickets’ total.');
 
     const ref = await transaction(async function (c) {
       await lockStock(c);
@@ -182,15 +185,16 @@ export async function buyTickets(body: Record<string, string>, opts: { createdBy
       });
       const r = newRef();
       await c.query(
-        'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, attribution, agency_code, created_by, link_expires_at) ' +
-          'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CASE WHEN $11 IS NULL THEN NULL ELSE NOW(3) + INTERVAL $12 DAY END)',
+        'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, attribution, agency_code, created_by, link_expires_at, discount) ' +
+          'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CASE WHEN $11 IS NULL THEN NULL ELSE NOW(3) + INTERVAL $12 DAY END, $13)',
         [r, e.id, order.buyer.email, order.buyer.ip, JSON.stringify(order.buyer), JSON.stringify(order.items), amount.toFixed(2), config.currency,
-          order.attribution ? JSON.stringify(order.attribution) : null, order.agencyCode, opts.createdBy || null, Math.max(1, Math.min(30, Math.floor(opts.linkDays || 1)))]
+          order.attribution ? JSON.stringify(order.attribution) : null, order.agencyCode, opts.createdBy || null, Math.max(1, Math.min(30, Math.floor(opts.linkDays || 1))),
+          discount ? discount.toFixed(2) : null]
       );
       return r;
     });
 
-    console.info('[shop] order ' + ref + ': ' + amount.toFixed(2) + ' ' + config.currency + ', ' + order.items.map(function (i) { return i.quantity + ' x ' + i.name; }).join(', '));
+    console.info('[shop] order ' + ref + ': ' + amount.toFixed(2) + ' ' + config.currency + (discount ? ' (discount ' + discount.toFixed(2) + ')' : '') + ', ' + order.items.map(function (i) { return i.quantity + ' x ' + i.name; }).join(', '));
     return { status: '1', paymentUrl: payLink(ref), orderId: ref };
   } catch (err) {
     if (err instanceof BuyerError) return { status: '0', message: err.message };
@@ -272,7 +276,7 @@ function datetime(iso: string): string {
 }
 
 export type PayState =
-  | { state: 'ready'; ref: string; amount: number; currency: string; items: OrderItemRow[]; init: ifza.TelrInit }
+  | { state: 'ready'; ref: string; amount: number; discount: number; currency: string; items: OrderItemRow[]; init: ifza.TelrInit }
   // nothing to pay here: the site's page to show instead
   | { state: 'done'; page: string }
   // the order's half hour is over (its tickets aren't held any more): a new order is needed
@@ -297,7 +301,7 @@ export async function preparePayment(ref: string): Promise<PayState | null> {
     // the card was sent already: its outcome decides
     if (o.pay_checkout_at) return 'settle';
     const ready = function (init: ifza.TelrInit): PayState {
-      return { state: 'ready', ref: o.ref, amount: Number(o.amount), currency: o.currency, items: o.items, init };
+      return { state: 'ready', ref: o.ref, amount: Number(o.amount), discount: Number(o.discount || 0), currency: o.currency, items: o.items, init };
     };
     if (o.pay_id) return Number(o.pay_open) ? ready(o.pay_init) : { state: 'expired', ref: o.ref };
     // a payment link from the members app (created_by) is open until its link_expires_at, not half an hour
@@ -587,12 +591,16 @@ export async function staffLinkUrl(ref: string): Promise<string | null> {
     if (!p) return config.altPaymentUrl;
     items.push({ productId: p.id, name: p.name, price: p.price, quantity: i.quantity, tier: p.tier, codes: p.codes });
   }
-  const amount = items.reduce(function (sum, i) { return sum + i.price * i.quantity; }, 0);
+  // the link's discount stays the same on today's prices
+  const discount = Number(o.discount || 0);
+  const amount = items.reduce(function (sum, i) { return sum + i.price * i.quantity; }, 0) - discount;
+  if (amount < 1) return config.altPaymentUrl;
   const next = newRef();
   await db.query(
-    'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, retry_of, attribution, agency_code, created_by, link_expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+    'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, retry_of, attribution, agency_code, created_by, link_expires_at, discount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)',
     [next, o.event_id, o.email, o.ip, JSON.stringify(o.buyer), JSON.stringify(items), amount.toFixed(2), config.currency, o.ref,
-      o.attribution == null ? null : (typeof o.attribution === 'string' ? o.attribution : JSON.stringify(o.attribution)), o.agency_code || null, o.created_by, o.link_expires_at]
+      o.attribution == null ? null : (typeof o.attribution === 'string' ? o.attribution : JSON.stringify(o.attribution)), o.agency_code || null, o.created_by, o.link_expires_at,
+      discount ? discount.toFixed(2) : null]
   );
   console.info('[shop] order ' + next + ': payment link ' + o.ref + ' again');
   return payPage(next);

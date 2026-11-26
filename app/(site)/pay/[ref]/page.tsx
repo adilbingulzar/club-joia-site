@@ -61,6 +61,10 @@ export default async function PayPage({ params }: { params: Promise<{ ref: strin
             </tbody>
           </table>
           <dl className="totals">
+            {state.discount > 0 && <>
+              <div><dt>Tickets</dt><dd>{money(state.amount + state.discount, state.currency)}</dd></div>
+              <div><dt>Discount</dt><dd>&minus;{money(state.discount, state.currency)}</dd></div>
+            </>}
             <div className="grand"><dt>Total</dt><dd>{money(state.amount, state.currency)}</dd></div>
           </dl>
           <CardPayment orderRef={ref} init={state.init} total={money(state.amount, state.currency)} />

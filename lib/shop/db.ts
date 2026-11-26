@@ -140,6 +140,7 @@ async function migrate(): Promise<void> {
       created_by       VARCHAR(191) NULL,               -- members app staff account (users.id) that made it as a payment link
       staff_cancelled_at DATETIME(3) NULL,              -- that payment link cancelled by staff
       link_expires_at  DATETIME(3) NULL,                -- that payment link can be paid until then
+      discount         DECIMAL(12,2) NULL,              -- that payment link's fixed discount off the tickets (amount = tickets - discount)
       created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       updated_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       paid_at          DATETIME(3) NULL,
@@ -258,6 +259,10 @@ async function migrate(): Promise<void> {
   const expiryCol = await run(pool(),
     "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'shop_orders' AND column_name = 'link_expires_at' LIMIT 1");
   if (!expiryCol.rows.length) await run(pool(), 'ALTER TABLE shop.orders ADD COLUMN link_expires_at DATETIME(3) NULL AFTER staff_cancelled_at');
+  // orders tables made before the payment links' discount
+  const discountCol = await run(pool(),
+    "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'shop_orders' AND column_name = 'discount' LIMIT 1");
+  if (!discountCol.rows.length) await run(pool(), 'ALTER TABLE shop.orders ADD COLUMN discount DECIMAL(12,2) NULL AFTER link_expires_at');
   // tables made before one row per submission: email was unique there
   const unique = await run(pool(),
     "SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'pre_registrations' AND index_name = 'registrations_email' AND non_unique = 0 LIMIT 1");
