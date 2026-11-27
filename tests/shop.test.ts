@@ -84,6 +84,8 @@ let routes: {
   link: { GET: (r: Request, c: Ctx<{ ref: string }>) => Promise<Response> };
   staff: { POST: (r: Request, c: Ctx<{ action: string }>) => Promise<Response> };
   prereg: { POST: (r: Request) => Promise<Response> };
+  checkout: { POST: (r: Request) => Promise<Response> };
+  currency: { POST: (r: Request, c: Ctx<{ ref: string }>) => Promise<Response> };
 };
 let closeDb: () => Promise<void>;
 // the test's own connection (the owner's), queries written as the shop's (lib/shop/db.ts)
@@ -191,7 +193,9 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
       retry: await import('@/app/shop/retry/[ref]/route'),
       link: await import('@/app/shop/link/[ref]/route'),
       staff: await import('@/app/api/staff/[action]/route'),
-      prereg: await import('@/app/api/preregister/route')
+      prereg: await import('@/app/api/preregister/route'),
+      checkout: await import('@/app/api/checkout/route'),
+      currency: await import('@/app/shop/currency/[ref]/route')
     };
     closeDb = (await import('@/lib/shop/db')).closeDb;
 
@@ -224,10 +228,12 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect(events[0].StartDate).toBe(dates.s);
 
     const types = (await api('buyTicketsTicketTypes', { eventId: EVENT, ticketType: '0' })).body;
-    // 3 days, Saturday and Sunday on sale; the old two-day packages listed off sale
-    expect(types).toHaveLength(18);
+    // 3 days, Saturday, Sunday and the daytime-only days on sale; the old two-day packages listed off sale
+    expect(types).toHaveLength(24);
     expect(types.filter(function (t: { ticketVisible: string }) { return t.ticketVisible === '1'; }).map(function (t: { id: string }) { return t.id; }).sort())
-      .toEqual(['pearly-white/3-days', 'pearly-white/sat', 'pearly-white/sun', 'ruby-red/3-days', 'ruby-red/sat', 'ruby-red/sun', 'ultra-black/3-days', 'ultra-black/sat', 'ultra-black/sun']);
+      .toEqual(['pearly-white/3-days', 'pearly-white/sat', 'pearly-white/sat-day', 'pearly-white/sun', 'pearly-white/sun-day',
+        'ruby-red/3-days', 'ruby-red/sat', 'ruby-red/sat-day', 'ruby-red/sun', 'ruby-red/sun-day',
+        'ultra-black/3-days', 'ultra-black/sat', 'ultra-black/sat-day', 'ultra-black/sun', 'ultra-black/sun-day']);
     expect(types.find(function (t: { ticketDescription: string }) { return t.ticketDescription === 'Ruby Red, 3 days'; }))
       .toMatchObject({ id: 'ruby-red/3-days', ticketPrice: '7000.00', softDelete: '0', ticketVisible: '1' });
     expect((await api('buyTicketsTicketTypes', { eventId: 'nope' })).body).toEqual([]);
@@ -560,6 +566,147 @@ describe.skipIf(!DB_URL)('ticket shop on a database', function () {
     expect((await staff('order', { createdBy: 'staff-test-user', buyer: linkBuyer(to), items: [{ id: 'ruby-red/sat', quantity: 1 }], discount: -5 })).status).toBe(400);
     expect((await staff('order', { createdBy: 'staff-test-user', buyer: linkBuyer(to), items: [{ id: 'ruby-red/sat', quantity: 1 }], discount: 1.234 })).status).toBe(400);
     expect(await one('SELECT discount FROM shop.orders WHERE ref = $1', [late.body.ref])).toEqual({ discount: null });
+  });
+
+  // ─── USD or AED (lib/currency.ts): the buyer's currency, at the peg, charged as shown ───
+
+  // the site's checkout (app/api/checkout) as the summary page sends it: { status, body }
+  const checkout = async function (items: { id: string; quantity: number }[], currency?: string, to = email) {
+    const buyerOf = { firstName: 'Shop', lastName: 'Tester', email: to, repeatEmail: to, address: 'Street 1', zipcode: '12345', city: 'Dubai', country: 'AE', phoneCode: 'AE', phone: '501234567', over21: true, terms: true };
+    const r = await routes.checkout.POST(new Request(SITE + '/api/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items, currency, buyer: buyerOf }) }));
+    return { status: r.status, body: await r.json() };
+  };
+  const payRef = function (url: string) { return decodeURIComponent(String(url).split('/pay/')[1] || ''); };
+  // "Pay in USD | AED" on /pay (app/shop/currency): { status, location }
+  const switchTo = async function (ref: string, to: string) {
+    const r = await routes.currency.POST(new Request(SITE + '/shop/currency/' + ref, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'to=' + to }), { params: Promise.resolve({ ref }) });
+    return { status: r.status, location: r.headers.get('location') };
+  };
+  const prices = function (items: unknown) { return (json(items) as { price: number }[]).map(function (i) { return Number(i.price); }); };
+
+  it('AED: the buyer picks AED at checkout and pays in dirhams', async function () {
+    // 2 × 7,000 and 1 × 1,500 dollars: 25,708 (25,707.5) and 5,509 (5,508.75) dirhams a ticket
+    const c = await checkout([{ id: 'ruby-red/3-days', quantity: 2 }, { id: 'pearly-white/sat-day', quantity: 1 }], 'AED');
+    expect(c.status).toBe(200);
+    const ref = payRef(c.body.url);
+    const o = await one('SELECT amount, currency, items, status FROM shop.orders WHERE ref = $1', [ref]);
+    expect(o).toMatchObject({ amount: '56925.00', currency: 'AED', status: 'pending' });
+    expect(prices(o.items)).toEqual([25708, 5509]);
+    // IFZA's payment in dirhams, the page shows them
+    const p = Object.values(payments).find(function (x) { return x.reference === ref; })!;
+    expect(p).toMatchObject({ amount: 56925, currency: 'AED' });
+    expect(await payState(ref)).toMatchObject({ state: 'ready', amount: 56925, discount: 0, currency: 'AED' });
+
+    // only PAID of this amount in AED counts: not the dollar amount, not dollars
+    const c1 = await card(ref);
+    expect(c1.body.orderUrl).toBeTruthy();
+    answers[ref] = { status: 'PAID', currency: 'USD' };
+    expect((await get(back(ref))).location).toBe(SITE + '/payment/pending?orderid=' + ref);
+    answers[ref] = { status: 'PAID', amount: 15500 };
+    expect((await get(back(ref))).location).toBe(SITE + '/payment/pending?orderid=' + ref);
+    answers[ref] = { status: 'PAID' };
+    expect((await get(back(ref))).location).toBe(SITE + '/thank-you?orderid=' + ref);
+    const done = await one('SELECT status, fulfilled_at FROM shop.orders WHERE ref = $1', [ref]);
+    expect(done.status).toBe('paid');
+    expect(done.fulfilled_at).toBeTruthy();
+    const { paidOrder } = await import('@/lib/shop/orders');
+    expect(await paidOrder(ref)).toEqual({ ref, value: 56925, currency: 'AED', items: 3 });
+
+    // lower case is fine; a currency the shop can't charge: the shop's own
+    const lower = await checkout([{ id: 'ruby-red/sat', quantity: 1 }], 'aed');
+    expect(await one('SELECT amount, currency FROM shop.orders WHERE ref = $1', [payRef(lower.body.url)])).toEqual({ amount: '11018.00', currency: 'AED' });
+    const euro = await checkout([{ id: 'ruby-red/sat', quantity: 1 }], 'EUR');
+    expect(await one('SELECT amount, currency FROM shop.orders WHERE ref = $1', [payRef(euro.body.url)])).toEqual({ amount: '3000.00', currency: 'USD' });
+
+    // declined in AED: "Complete your payment" starts a new order in AED again
+    const d = await checkout([{ id: 'ultra-black/sun-day', quantity: 1 }], 'AED');
+    const dref = payRef(d.body.url);
+    expect(await one('SELECT amount, currency FROM shop.orders WHERE ref = $1', [dref])).toEqual({ amount: '16526.00', currency: 'AED' });
+    await toBank(dref);
+    answers[dref] = { status: 'DECLINED' };
+    expect((await get(back(dref))).location).toBe(SITE + '/payment/denied?orderid=' + dref);
+    const again = await get(SITE + '/shop/retry/' + dref);
+    const rref = decodeURIComponent(String(again.location).split('/shop/pay/')[1] || '');
+    expect(await one('SELECT retry_of, amount, currency FROM shop.orders WHERE ref = $1', [rref])).toEqual({ retry_of: dref, amount: '16526.00', currency: 'AED' });
+  });
+
+  it('AED: switching currency on the payment page makes the order again in it', async function () {
+    const c = await checkout([{ id: 'ruby-red/sat', quantity: 1 }]);
+    const ref = payRef(c.body.url);
+    expect(await one('SELECT amount, currency FROM shop.orders WHERE ref = $1', [ref])).toEqual({ amount: '3000.00', currency: 'USD' });
+    const mailsBefore = mails.length;
+
+    const sw = await switchTo(ref, 'AED');
+    expect(sw.status).toBe(303);
+    const next = payRef(String(sw.location));
+    expect(next).not.toBe(ref);
+    expect(await one('SELECT retry_of, amount, currency, status, discount FROM shop.orders WHERE ref = $1', [next])).toEqual({ retry_of: ref, amount: '11018.00', currency: 'AED', status: 'pending', discount: null });
+    // the old one is cancelled, without the "One more step" email (nothing failed)
+    const old = await one('SELECT status, failed_email_at FROM shop.orders WHERE ref = $1', [ref]);
+    expect(old.status).toBe('cancelled');
+    expect(old.failed_email_at).toBeTruthy();
+    expect(mails.slice(mailsBefore).join('\n')).not.toContain('One more step');
+    expect(await payState(ref)).toEqual({ state: 'done', page: SITE + '/payment/cancel?orderid=' + ref });
+    expect(await payState(next)).toMatchObject({ state: 'ready', amount: 11018, currency: 'AED' });
+    expect(Object.values(payments).find(function (x) { return x.reference === next; })).toMatchObject({ amount: 11018, currency: 'AED' });
+
+    // the same currency, one the shop can't charge, or the old order: the page as it is
+    expect(await switchTo(next, 'AED')).toEqual({ status: 303, location: SITE + '/pay/' + next });
+    expect(await switchTo(next, 'EUR')).toEqual({ status: 303, location: SITE + '/pay/' + next });
+    expect(await switchTo(ref, 'USD')).toEqual({ status: 303, location: SITE + '/pay/' + ref });
+    expect((await pool.query('SELECT ref FROM shop.orders WHERE retry_of = $1', [ref])).rows).toHaveLength(1);
+
+    // back to dollars, and to dirhams again: each a new order of the same first one
+    const usd = payRef(String((await switchTo(next, 'USD')).location));
+    expect(await one('SELECT retry_of, amount, currency FROM shop.orders WHERE ref = $1', [usd])).toEqual({ retry_of: ref, amount: '3000.00', currency: 'USD' });
+    const aed = payRef(String((await switchTo(usd, 'AED')).location));
+    expect(await one('SELECT retry_of, amount, currency FROM shop.orders WHERE ref = $1', [aed])).toEqual({ retry_of: ref, amount: '11018.00', currency: 'AED' });
+
+    // once the card was sent the currency stays
+    await toBank(aed);
+    expect(await switchTo(aed, 'USD')).toEqual({ status: 303, location: SITE + '/pay/' + aed });
+    expect((await pool.query('SELECT ref FROM shop.orders WHERE retry_of = $1', [ref])).rows).toHaveLength(3);
+    answers[aed] = { status: 'PAID' };
+    expect((await get(back(aed))).location).toBe(SITE + '/thank-you?orderid=' + aed);
+    // the first order's retry link: paid already
+    expect((await get(SITE + '/shop/retry/' + ref)).location).toBe(SITE + '/thank-you?orderid=' + aed);
+    // an unknown order
+    expect((await switchTo('CJNOPE123', 'AED')).status).toBe(404);
+  });
+
+  it('AED: a payment link with a discount, switched to AED by the buyer, stays in AED', async function () {
+    const to = 'shoptest+aedlink-' + Date.now() + '@example.com';
+    const linkBuyer = { firstName: 'Link', lastName: 'Tester', email: to, address: 'Street 1', zipcode: '12345', city: 'Dubai', country: 'AE', phoneCode: 'AE', phone: '501234567', over21: true, terms: true };
+    // staff make it in the shop's currency: 9,000 − 500 dollars
+    const made = await staffCall('order', { createdBy: 'staff-test-user', buyer: linkBuyer, items: [{ id: 'ultra-black/sun', quantity: 1 }], discount: 500 });
+    expect(made.body).toMatchObject({ amount: 8500, discount: 500, currency: 'USD' });
+    const ref = made.body.ref;
+    expect((await get(made.body.url)).location).toBe(SITE + '/pay/' + ref);
+    expect(await payState(ref)).toMatchObject({ state: 'ready', amount: 8500, discount: 500, currency: 'USD' });
+
+    // the buyer switches: 33,053 − 1,836 (1,836.25) dirhams, still the staff's link
+    const aed = payRef(String((await switchTo(ref, 'AED')).location));
+    const o = await one('SELECT retry_of, amount, discount, currency, created_by, link_expires_at FROM shop.orders WHERE ref = $1', [aed]);
+    const first = await one('SELECT link_expires_at FROM shop.orders WHERE ref = $1', [ref]);
+    expect(o).toMatchObject({ retry_of: ref, amount: '31217.00', discount: '1836.00', currency: 'AED', created_by: 'staff-test-user' });
+    expect(String(o.link_expires_at)).toBe(String(first.link_expires_at));
+    expect(await payState(aed)).toMatchObject({ state: 'ready', amount: 31217, discount: 1836, currency: 'AED' });
+    // the link opens the AED one now
+    expect((await get(made.body.url)).location).toBe(SITE + '/pay/' + aed);
+
+    // the card refused: the link starts again in AED, with the discount in AED
+    expect((await card(aed, 'refused')).body.page).toBe(SITE + '/payment/denied?orderid=' + aed);
+    const retry = payRef(String((await get(made.body.url)).location));
+    expect(retry).not.toBe(aed);
+    expect(await one('SELECT retry_of, amount, discount, currency FROM shop.orders WHERE ref = $1', [retry])).toEqual({ retry_of: ref, amount: '31217.00', discount: '1836.00', currency: 'AED' });
+    // and back to dollars: the staff's own discount again
+    const usd = payRef(String((await switchTo(retry, 'USD')).location));
+    expect(await one('SELECT amount, discount, currency FROM shop.orders WHERE ref = $1', [usd])).toEqual({ amount: '8500.00', discount: '500.00', currency: 'USD' });
+
+    // cancelled by staff: no switching, the link shows the cancelled page
+    expect((await staffCall('cancel', { ref })).body).toEqual({ result: 'cancelled' });
+    expect(await switchTo(usd, 'AED')).toEqual({ status: 303, location: SITE + '/pay/' + usd });
+    expect((await get(made.body.url)).location).toBe(SITE + '/payment/cancel?orderid=' + ref);
   });
 
   it('limits unpaid orders per email (50) and per address (50) in an hour', async function () {
