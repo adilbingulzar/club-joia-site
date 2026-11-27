@@ -64,7 +64,7 @@ export default function Home() {
                   return <li key={t.id}><Link href={t.page}><i className={'sw ' + t.swatch}></i><b>{t.name}</b><span><Price tier={t.id} pkg="3-days" /></span></Link></li>;
                 })}
               </ul>
-              <p className="hero-note">Prices for 3-day access. Saturday, Sunday and daytime-only access also available.</p>
+              <p className="hero-note">Prices for 3-day access, VAT included. Saturday, Sunday and daytime-only access also available.</p>
               <div className="btns">
                 <Link className="btn" href="/tickets">Book your access</Link>
                 <span className="ltd">Limited availability</span>
@@ -155,7 +155,7 @@ export default function Home() {
         <section className="band" id="access">
           <div className="wrap">
             <h2>Choose your access</h2>
-            <p style={{ color: 'var(--mute)', margin: 0, maxWidth: '60ch' }}>Three access levels, each available for all three days, a single Saturday or Sunday, or daytime only.</p>
+            <p style={{ color: 'var(--mute)', margin: 0, maxWidth: '60ch' }}>Three access levels, each available for all three days, a single Saturday or Sunday, or daytime only. All prices include VAT.</p>
             <div className="access-cards">
               {tiers.map(function (t) {
                 return <Link className="access-card" href={t.page} key={t.id}><img src={t.card} alt={t.name + ' membership card'} width="2000" height="1262" loading="lazy" /><b>{t.name}</b><small>{t.perks.length + ' benefits, 3 days '}<Price tier={t.id} pkg="3-days" /></small>

@@ -51,7 +51,7 @@ export default function TierPage({ id }: { id: string }) {
                   return <li key={p.id}><div><b>{p.name}</b><small>{p.dates}</small></div><span><Price tier={tier.id} pkg={p.id} aed /></span></li>;
                 })}
               </ul>
-              <p className="note">Prices per guest. Choose your days and number of guests on the next page.</p>
+              <p className="note">Prices per guest, VAT included. Choose your days and number of guests on the next page.</p>
             </div>
             <div>
               <h2>Benefits</h2>

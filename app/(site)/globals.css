@@ -205,6 +205,13 @@ button.btn{border:0;cursor:pointer;font-family:inherit}
 .price-list small{display:block;color:var(--mute);font-size:13px}
 .price-list span{font-family:var(--disp);font-weight:600;font-size:clamp(15px,1.8vw,20px);color:var(--gold);white-space:nowrap;text-align:right}
 /* a dollar price's dirham amount, underneath */
+.totals small.vat{margin-left:8px;font-family:var(--body);font-size:13px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--mute)}
+.currency-switch{display:inline-flex;align-items:center;gap:4px;margin:24px 0 0;padding:4px;border:1px solid var(--line);border-radius:99px;font-size:14px}
+.currency-switch span{color:var(--mute);padding:0 10px 0 12px}
+.currency-switch button{background:transparent;border:0;color:var(--cream);font-family:inherit;font-weight:600;font-size:14px;letter-spacing:.04em;padding:8px 18px;border-radius:99px;cursor:pointer;transition:background .2s,color .2s}
+.currency-switch button:hover{background:rgba(255,255,255,.08)}
+.currency-switch button[aria-pressed="true"]{background:var(--sun);color:#000}
+.summary .currency-switch{margin:0 0 24px}
 small.aed{display:block;margin-top:4px;font-family:var(--body);font-weight:400;font-size:13px;letter-spacing:0;color:var(--mute)}
 .from small.aed{font-size:14px}
 /* hero: a press quote above the headline */

@@ -5,6 +5,8 @@ import { PageHeader, Footer } from '@/components/SiteNav';
 import CardPayment from '@/components/CardPayment';
 import { money, ticket } from '@/lib/config';
 import { preparePayment } from '@/lib/shop/orders';
+import { shopConfig } from '@/lib/shop/config';
+import { payCurrencies } from '@/lib/currency';
 
 export const metadata: Metadata = { title: 'Payment | Club JOIA 300', robots: { index: false } };
 
@@ -25,6 +27,8 @@ export default async function PayPage({ params }: { params: Promise<{ ref: strin
   }
   if (!state) notFound();
   if (state.state === 'done') redirect(state.page);
+  // USD | AED: another currency makes the order again in it (app/shop/currency)
+  const currencies = payCurrencies(shopConfig.currency);
 
   return (
     <>
@@ -49,6 +53,12 @@ export default async function PayPage({ params }: { params: Promise<{ ref: strin
         </>}
 
         {state.state === 'ready' && <>
+          {currencies.length > 1 && <form className="currency-switch" method="post" action={'/shop/currency/' + encodeURIComponent(ref)} aria-label="Currency">
+            <span>Pay in</span>
+            {currencies.map(function (cur) {
+              return <button type="submit" name="to" value={cur} key={cur} aria-pressed={cur === state.currency.toUpperCase()}>{cur}</button>;
+            })}
+          </form>}
           <table className="lines">
             <thead><tr><th scope="col">Ticket</th><th scope="col" className="num">Qty</th><th scope="col" className="num">Subtotal</th></tr></thead>
             <tbody>
@@ -65,7 +75,7 @@ export default async function PayPage({ params }: { params: Promise<{ ref: strin
               <div><dt>Tickets</dt><dd>{money(state.amount + state.discount, state.currency)}</dd></div>
               <div><dt>Discount</dt><dd>&minus;{money(state.discount, state.currency)}</dd></div>
             </>}
-            <div className="grand"><dt>Total</dt><dd>{money(state.amount, state.currency)}</dd></div>
+            <div className="grand"><dt>Total <small className="vat">incl. VAT</small></dt><dd>{money(state.amount, state.currency)}</dd></div>
           </dl>
           <CardPayment orderRef={ref} init={state.init} total={money(state.amount, state.currency)} />
         </>}

@@ -86,7 +86,7 @@ export function OrderBar() {
     <div className={'order-bar' + (n > 0 ? ' show' : '')} id="order-bar" role="region" aria-label="Your order">
       <div className="wrap">
         <div>
-          <small id="bar-count">{n + (n === 1 ? ' ticket' : ' tickets')}</small>
+          <small id="bar-count">{n + (n === 1 ? ' ticket' : ' tickets') + ', incl. VAT'}</small>
           <strong id="bar-total">{catalog.money(cart.total)}</strong>
         </div>
         <Link className="btn" href="/summary">Review order</Link>

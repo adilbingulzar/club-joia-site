@@ -88,6 +88,16 @@ offers "Start again" (a new order, stock checked again).
 | `app/Api/Eventsnew/[name]`, `app/shop/...`, `app/api/pay`, `app/api/pay/status` | the HTTP routes |
 | `app/pay/[ref]`, `components/CardPayment.tsx` | the payment page with Telr's card fields |
 
+**USD or AED:** when the shop sells in USD (`SHOP_CURRENCY`), the buyer can pay in AED too
+(`lib/currency.ts`): a "Pay in USD | AED" switch on `/tickets` and `/summary` (kept in
+`sessionStorage`, key `cj300-currency`) and on `/pay/<ref>`. AED prices are the dollar prices at the
+dirham's fixed peg (3.6725), each ticket rounded to a whole dirham, and the order is saved and
+charged in the currency picked. On `/pay` (also for payment links) the switch makes the order again
+in the other currency (`switchCurrency`, `/shop/currency/<ref>`; IFZA takes each reference once) and
+cancels the old one without an email. Retries and payment links keep the buyer's last currency, a
+link's discount converted. The members app adds AED orders up in USD (its `SHOP_CURRENCY` must be
+USD then).
+
 The currency (`SHOP_CURRENCY`, AED) must be one IFZA's store accepts, else IFZA refuses the
 payment and `/summary` says "Payment isn't available for your order right now". The return domain
 (`SHOP_PUBLIC_URL`, else `SHOP_SITE_URL`, https) must be registered with IFZA.

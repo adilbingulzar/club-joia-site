@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useCart, useHydrated, type Line } from '@/lib/cart';
 import { CJ_CONFIG as cfg } from '@/lib/config';
-import { useCatalog } from '@/lib/prices';
+import { CurrencySwitch, useCatalog } from '@/lib/prices';
 import { countries } from '@/lib/countries';
 import { isOver21, UNDER_21 } from '@/lib/age';
 
@@ -199,6 +199,8 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         items: lines.map(function (l) { return { id: l.ticket.id, quantity: l.quantity }; }),
+        // the currency the prices above are in: the order is charged in it
+        currency: catalog.currency,
         buyer: {
           firstName: buyer.firstName, lastName: buyer.lastName, email: buyer.email, repeatEmail: buyer.repeatEmail,
           address: buyer.address, zipcode: buyer.zipcode, city: buyer.city, country: buyer.country,
@@ -235,6 +237,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
         <p className="alert error" role="alert">Ticket prices can’t be loaded right now. Your tickets are kept, please try again in a moment.</p>
       </div>}
       <div id="order" hidden={!hydrated || !catalog.live || !lines.length}>
+        <CurrencySwitch />
         <table className="lines">
           <thead><tr><th scope="col">Ticket</th><th scope="col" className="num unit">Price</th><th scope="col" className="num">Qty</th><th scope="col" className="num">Subtotal</th></tr></thead>
           <tbody id="lines">
@@ -248,7 +251,7 @@ export default function Summary({ termsUrl, paymentFailed }: { termsUrl: string;
         </table>
         <dl className="totals">
           <div><dt>Tickets</dt><dd id="count">{n + (n === 1 ? ' ticket' : ' tickets')}</dd></div>
-          <div className="grand"><dt>Total</dt><dd id="total">{money(cart.total)}</dd></div>
+          <div className="grand"><dt>Total <small className="vat">incl. VAT</small></dt><dd id="total">{money(cart.total)}</dd></div>
         </dl>
 
         <form className="buyer" noValidate onSubmit={function (e) { pay(e, lines); }}>

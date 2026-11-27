@@ -75,9 +75,10 @@ async function ticketIds(): Promise<Record<string, string>> {
  * buyer. `items` as the site's cart: [{ id: "<tier>/<package>", quantity }].
  * ip: the buyer's address (the shop's limit on unpaid orders); attribution: the ad campaign (JSON);
  * createdBy: the members app staff account that made it (a payment link), which has no such limit,
- * payable for linkDays days.
+ * payable for linkDays days, in the shop's currency (the buyer can switch it on /pay);
+ * currency: the one the buyer picked on the site (lib/currency.ts payCurrencies), else the shop's.
  */
-export async function placeOrder(buyer: Buyer, items: unknown, extra: { ip?: string; attribution?: string; createdBy?: string; linkDays?: number; discount?: number } = {}): Promise<string> {
+export async function placeOrder(buyer: Buyer, items: unknown, extra: { ip?: string; attribution?: string; createdBy?: string; linkDays?: number; discount?: number; currency?: string } = {}): Promise<string> {
   if (!Array.isArray(items) || !items.length) throw new CheckoutError('Your order is empty.');
   const buyerCountry = country(buyer.country)!;
   const catalog = await getCatalog();
@@ -114,7 +115,7 @@ export async function placeOrder(buyer: Buyer, items: unknown, extra: { ip?: str
     form['tickets[' + i + '][quantity]'] = String(quantity);
   });
 
-  const res = await buyTickets(form, extra.createdBy ? { createdBy: extra.createdBy, linkDays: extra.linkDays, discount: extra.discount } : {});
+  const res = await buyTickets(form, extra.createdBy ? { createdBy: extra.createdBy, linkDays: extra.linkDays, discount: extra.discount } : { currency: extra.currency });
   if (res.status === '1' && res.orderId) return res.orderId;
   // the shop's messages are written for buyers (sold out, unfinished orders, ...)
   throw new CheckoutError(res && res.message ? String(res.message) : 'We couldn’t start the payment. Please try again in a moment.');

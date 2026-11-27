@@ -31,7 +31,9 @@ export async function POST(request: Request) {
       // the buyer's address, for the shop's limit on unpaid orders: the one nginx added (the last
       // X-Forwarded-For entry), not one the buyer wrote
       ip: clientIp(request.headers),
-      attribution: campaign ? JSON.stringify(campaign) : undefined
+      attribution: campaign ? JSON.stringify(campaign) : undefined,
+      // USD or AED, as the buyer saw the prices (lib/currency.ts; anything else: the shop's own)
+      currency: typeof body.currency === 'string' ? body.currency : undefined
     });
     // the payment now, so a refusal shows on the form
     const pay = await preparePayment(orderId);

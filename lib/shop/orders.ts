@@ -15,6 +15,7 @@ import { countries } from '../countries';
 import { fulfil } from './fulfil';
 import { notPaidEmail } from './email';
 import { checked as checkedAttribution, type Attribution } from '../attribution';
+import { convert, payCurrencies, payCurrency } from '../currency';
 
 export class BuyerError extends Error {}
 
@@ -63,6 +64,27 @@ async function taken(client: Db, eventId: string): Promise<Record<string, number
 
 function left(p: Product, takenOf: Record<string, number>): number {
   return p.stock === null ? 1000 : Math.max(0, p.stock - (takenOf[p.id] || 0));
+}
+
+// The order's tickets again at today's prices in `currency` (lib/currency.ts); null when one is off sale
+function itemsAt(items: OrderItemRow[], currency: string): OrderItemRow[] | null {
+  const out: OrderItemRow[] = [];
+  for (const i of items) {
+    const p = product(i.productId);
+    if (!p) return null;
+    out.push({ productId: p.id, name: p.name, price: convert(p.price, config.currency, currency), quantity: i.quantity, tier: p.tier, codes: p.codes });
+  }
+  return out;
+}
+
+// a payment link's discount (set by staff on the first order, in its currency) in `currency`
+function discountIn(root: { discount?: unknown; currency: string }, currency: string): number {
+  const d = Number(root.discount || 0);
+  return d ? convert(d, root.currency, currency) : 0;
+}
+
+function total(items: OrderItemRow[]): number {
+  return items.reduce(function (s, i) { return s + i.price * i.quantity; }, 0);
 }
 
 // ─── The site's calls (Api/Eventsnew/...) ───
@@ -154,15 +176,18 @@ function payLink(ref: string): string {
 // buyTickets: { status: '1', paymentUrl, orderId } or { status: '0', message } for the buyer
 // opts.createdBy: the members app staff account (users.id) making it as a payment link (lib/checkout
 // placeOrder from app/api/staff): no limit on unpaid orders, and it can be paid for opts.linkDays days
-export async function buyTickets(body: Record<string, string>, opts: { createdBy?: string; linkDays?: number; discount?: number } = {}) {
+// opts.currency: USD or AED as the buyer picked (lib/currency.ts), else the shop's own currency
+export async function buyTickets(body: Record<string, string>, opts: { createdBy?: string; linkDays?: number; discount?: number; currency?: string } = {}) {
   try {
     if (!ifza.configured()) throw new BuyerError('Online payment isn’t set up yet. Please contact us to complete your booking.');
     const e = await saleEvent();
     if (!e) throw new BuyerError('Tickets aren’t on sale at the moment.');
     const order = readOrder(body);
+    const currency = payCurrency(config.currency, opts.currency);
+    order.items.forEach(function (i) { i.price = convert(i.price, config.currency, currency); });
     // a payment link's discount (staff only): a fixed amount off the tickets, the total stays at least 1
-    const discount = opts.createdBy && opts.discount ? opts.discount : 0;
-    const amount = order.items.reduce(function (s, i) { return s + i.price * i.quantity; }, 0) - discount;
+    const discount = opts.createdBy && opts.discount ? convert(opts.discount, config.currency, currency) : 0;
+    const amount = total(order.items) - discount;
     if (amount < 1) throw new BuyerError('The discount must be less than the tickets’ total.');
 
     const ref = await transaction(async function (c) {
@@ -187,14 +212,14 @@ export async function buyTickets(body: Record<string, string>, opts: { createdBy
       await c.query(
         'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, attribution, agency_code, created_by, link_expires_at, discount) ' +
           'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CASE WHEN $11 IS NULL THEN NULL ELSE NOW(3) + INTERVAL $12 DAY END, $13)',
-        [r, e.id, order.buyer.email, order.buyer.ip, JSON.stringify(order.buyer), JSON.stringify(order.items), amount.toFixed(2), config.currency,
+        [r, e.id, order.buyer.email, order.buyer.ip, JSON.stringify(order.buyer), JSON.stringify(order.items), amount.toFixed(2), currency,
           order.attribution ? JSON.stringify(order.attribution) : null, order.agencyCode, opts.createdBy || null, Math.max(1, Math.min(30, Math.floor(opts.linkDays || 1))),
           discount ? discount.toFixed(2) : null]
       );
       return r;
     });
 
-    console.info('[shop] order ' + ref + ': ' + amount.toFixed(2) + ' ' + config.currency + (discount ? ' (discount ' + discount.toFixed(2) + ')' : '') + ', ' + order.items.map(function (i) { return i.quantity + ' x ' + i.name; }).join(', '));
+    console.info('[shop] order ' + ref + ': ' + amount.toFixed(2) + ' ' + currency + (discount ? ' (discount ' + discount.toFixed(2) + ')' : '') + ', ' + order.items.map(function (i) { return i.quantity + ' x ' + i.name; }).join(', '));
     return { status: '1', paymentUrl: payLink(ref), orderId: ref };
   } catch (err) {
     if (err instanceof BuyerError) return { status: '0', message: err.message };
@@ -489,13 +514,11 @@ export async function retryUrl(ref: string): Promise<string | null> {
   )).rows[0].n);
   if (lastHour >= 5) return config.altPaymentUrl;
 
-  const items: OrderItemRow[] = [];
-  for (const i of o.items as OrderItemRow[]) {
-    const p = product(i.productId);
-    if (!p) return config.altPaymentUrl;
-    items.push({ productId: p.id, name: p.name, price: p.price, quantity: i.quantity, tier: p.tier, codes: p.codes });
-  }
-  const amount = items.reduce(function (s, i) { return s + i.price * i.quantity; }, 0);
+  // in the currency the buyer paid in, while it can still be paid in
+  const currency = payCurrency(config.currency, o.currency);
+  const items = itemsAt(o.items, currency);
+  if (!items) return config.altPaymentUrl;
+  const amount = total(items);
   const next = await transaction(async function (c) {
     await lockStock(c);
     const t = await taken(c, o.event_id);
@@ -504,7 +527,7 @@ export async function retryUrl(ref: string): Promise<string | null> {
     await c.query(
       'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, retry_of, attribution, agency_code) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
       // a retry keeps the ad campaign and the agency code of the order it repeats
-      [r, o.event_id, o.email, o.ip, JSON.stringify(o.buyer), JSON.stringify(items), amount.toFixed(2), config.currency, o.retry_of || o.ref,
+      [r, o.event_id, o.email, o.ip, JSON.stringify(o.buyer), JSON.stringify(items), amount.toFixed(2), currency, o.retry_of || o.ref,
         o.attribution == null ? null : (typeof o.attribution === 'string' ? o.attribution : JSON.stringify(o.attribution)), o.agency_code || null]
     );
     return r;
@@ -550,12 +573,12 @@ export function staffLink(ref: string): string {
   return config.publicUrl + '/shop/link/' + encodeURIComponent(ref);
 }
 
-type ChainOrder = { id: number; ref: string; status: string; pay_id: string | null; pay_checkout_at: unknown; pay_open: number | string | null };
+type ChainOrder = { id: number; ref: string; status: string; currency: string; pay_id: string | null; pay_checkout_at: unknown; pay_open: number | string | null };
 
 // the order and its retries, newest first
 async function chain(root: string): Promise<ChainOrder[]> {
   return (await db.query(
-    'SELECT id, ref, status, pay_id, pay_checkout_at, (pay_expires_at > NOW(3) + INTERVAL 1 MINUTE) AS pay_open FROM shop.orders WHERE ref = $1 OR retry_of = $1 ORDER BY id DESC',
+    'SELECT id, ref, status, currency, pay_id, pay_checkout_at, (pay_expires_at > NOW(3) + INTERVAL 1 MINUTE) AS pay_open FROM shop.orders WHERE ref = $1 OR retry_of = $1 ORDER BY id DESC',
     [root]
   )).rows as ChainOrder[];
 }
@@ -585,26 +608,89 @@ export async function staffLinkUrl(ref: string): Promise<string | null> {
     'SELECT COUNT(*) AS n FROM shop.orders WHERE retry_of = $1 AND created_at > NOW(3) - INTERVAL 1 HOUR', [o.ref]
   )).rows[0].n);
   if (lastHour >= 5) return config.altPaymentUrl;
-  const items: OrderItemRow[] = [];
-  for (const i of o.items as OrderItemRow[]) {
-    const p = product(i.productId);
-    if (!p) return config.altPaymentUrl;
-    items.push({ productId: p.id, name: p.name, price: p.price, quantity: i.quantity, tier: p.tier, codes: p.codes });
-  }
+  // in the currency the buyer last picked (/pay), while it can still be paid in
+  const currency = payCurrency(config.currency, last.currency);
+  const items = itemsAt(o.items, currency);
+  if (!items) return config.altPaymentUrl;
   // the link's discount stays the same on today's prices
-  const discount = Number(o.discount || 0);
-  const amount = items.reduce(function (sum, i) { return sum + i.price * i.quantity; }, 0) - discount;
+  const discount = discountIn(o, currency);
+  const amount = total(items) - discount;
   if (amount < 1) return config.altPaymentUrl;
   const next = newRef();
   await db.query(
     'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, retry_of, attribution, agency_code, created_by, link_expires_at, discount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)',
-    [next, o.event_id, o.email, o.ip, JSON.stringify(o.buyer), JSON.stringify(items), amount.toFixed(2), config.currency, o.ref,
+    [next, o.event_id, o.email, o.ip, JSON.stringify(o.buyer), JSON.stringify(items), amount.toFixed(2), currency, o.ref,
       o.attribution == null ? null : (typeof o.attribution === 'string' ? o.attribution : JSON.stringify(o.attribution)), o.agency_code || null, o.created_by, o.link_expires_at,
       discount ? discount.toFixed(2) : null]
   );
   console.info('[shop] order ' + next + ': payment link ' + o.ref + ' again');
   return payPage(next);
 }
+
+// ─── The buyer's currency on /pay ───
+
+// switches of one order (and its retries) an hour, so a page clicked over and over can't fill the orders
+const SWITCHES_PER_HOUR = 10;
+
+class SoldOut extends Error {}
+
+/**
+ * "Pay in USD | AED" on /pay/<ref> (app/shop/currency): a new order for the same tickets at today's
+ * prices in that currency (lib/currency.ts), as a retry of the first order (IFZA takes each reference
+ * once), with a payment link's discount in that currency; the order itself is cancelled, without the
+ * "One more step" email (nothing failed). Only while the order can be paid and its card wasn't sent.
+ * The page to go to: the new order's payment page, else the order's own. null for an unknown order.
+ */
+export async function switchCurrency(ref: string, to: string): Promise<string | null> {
+  const currency = String(to || '').toUpperCase();
+  return transaction(async function (c): Promise<string | null> {
+    await lockStock(c);
+    const o = (await c.query(
+      'SELECT *, (pay_expires_at > NOW(3) + INTERVAL 1 MINUTE) AS pay_open, (created_at > NOW(3) - INTERVAL $2 MINUTE) AS held, ' +
+        '(link_expires_at IS NULL OR link_expires_at > NOW(3)) AS link_open FROM shop.orders WHERE ref = $1 FOR UPDATE',
+      [ref, config.holdMinutes]
+    )).rows[0];
+    if (!o) return null;
+    const stay = payPage(o.ref);
+    const payable = o.status === 'pending' && !o.pay_checkout_at && !o.staff_cancelled_at &&
+      (o.pay_id ? Number(o.pay_open) : Number(o.created_by ? o.link_open : o.held)) && (!o.created_by || Number(o.link_open));
+    if (!payable || payCurrencies(config.currency).indexOf(currency) < 0 || currency === String(o.currency).toUpperCase()) return stay;
+    const root = o.retry_of
+      ? (await c.query('SELECT ref, discount, currency, staff_cancelled_at FROM shop.orders WHERE ref = $1', [o.retry_of])).rows[0]
+      : o;
+    if (!root || root.staff_cancelled_at) return stay;
+    const lastHour = Number((await c.query(
+      'SELECT COUNT(*) AS n FROM shop.orders WHERE retry_of = $1 AND created_at > NOW(3) - INTERVAL 1 HOUR', [root.ref]
+    )).rows[0].n);
+    if (lastHour >= SWITCHES_PER_HOUR) return stay;
+    const items = itemsAt(o.items, currency);
+    if (!items) return stay;
+    const discount = o.created_by ? discountIn(root, currency) : 0;
+    const amount = total(items) - discount;
+    if (amount < 1) return stay;
+
+    await c.query(
+      "UPDATE shop.orders SET status = 'cancelled', failed_email_at = COALESCE(failed_email_at, NOW(3)), updated_at = NOW(3) WHERE id = $1",
+      [o.id]
+    );
+    const t = await taken(c, o.event_id);
+    if (items.some(function (i) { return left(product(i.productId)!, t) < i.quantity; })) throw new SoldOut();
+    const next = newRef();
+    await c.query(
+      'INSERT INTO shop.orders (ref, event_id, email, ip, buyer, items, amount, currency, retry_of, attribution, agency_code, created_by, link_expires_at, discount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)',
+      [next, o.event_id, o.email, o.ip, JSON.stringify(o.buyer), JSON.stringify(items), amount.toFixed(2), currency, root.ref,
+        o.attribution == null ? null : (typeof o.attribution === 'string' ? o.attribution : JSON.stringify(o.attribution)), o.agency_code || null,
+        o.created_by || null, o.link_expires_at || null, discount ? discount.toFixed(2) : null]
+    );
+    console.info('[shop] order ' + next + ': ' + o.ref + ' in ' + currency + ', ' + amount.toFixed(2));
+    return payPage(next);
+  }).catch(function (e) {
+    // a ticket sold out meanwhile: nothing changed, the order stays as it was
+    if (e instanceof SoldOut) return payPage(ref);
+    throw e;
+  });
+}
+
 
 /**
  * Cancels a staff order's payment link: its unpaid orders become cancelled and the link shows the
