@@ -34,7 +34,7 @@ export default function TierPage({ id }: { id: string }) {
             <p className="eyebrow">Access level &nbsp;|&nbsp; December 4, 5 &amp; 6</p>
             <h1><i className={'sw ' + tier.swatch}></i>{tier.name}</h1>
             <p className="lead">{tier.intro}</p>
-            <p className="from" id="from">3-day access<strong><Price tier={tier.id} pkg="3-days" /></strong></p>
+            <p className="from" id="from">3-day access<strong><Price tier={tier.id} pkg="3-days" aed /></strong></p>
             <div className="btns">
               <Link className="btn" href={'/tickets#' + tier.id}>{'Book ' + tier.name}</Link>
               <span className="ltd">Limited access available</span>
@@ -48,7 +48,7 @@ export default function TierPage({ id }: { id: string }) {
               <h2>Prices</h2>
               <ul className="price-list" id="price-list">
                 {cfg.packages.map(function (p) {
-                  return <li key={p.id}><div><b>{p.name}</b><small>{p.dates}</small></div><span><Price tier={tier.id} pkg={p.id} /></span></li>;
+                  return <li key={p.id}><div><b>{p.name}</b><small>{p.dates}</small></div><span><Price tier={tier.id} pkg={p.id} aed /></span></li>;
                 })}
               </ul>
               <p className="note">Prices per guest. Choose your days and number of guests on the next page.</p>

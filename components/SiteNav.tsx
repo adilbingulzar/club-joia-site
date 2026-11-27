@@ -8,7 +8,10 @@ export type Cta = { href: string; label: string; badge?: boolean };
 export default function SiteNav({ cta, current }: { cta?: Cta; current?: string }) {
   return (
     <nav>
-      <Link className="logo" href="/" aria-label="Club JOIA 300 home"><Lockup /></Link>
+      <div className="brand">
+        <Link className="logo" href="/" aria-label="Club JOIA 300 home"><Lockup /></Link>
+        <Sponsor />
+      </div>
       {cta && (
         <div className="nav-links">
           <Link className="hide-sm" href="/ruby-red" aria-current={current === 'ruby-red' ? 'page' : undefined}>Ruby Red</Link>
@@ -18,6 +21,16 @@ export default function SiteNav({ cta, current }: { cta?: Cta; current?: string 
         </div>
       )}
     </nav>
+  );
+}
+
+/* "Sponsored by IFZA" beside the logo, under it on phones and tablets; links to IFZA's website. */
+export function Sponsor() {
+  return (
+    <a className="sponsor" href="https://ifza.com/" target="_blank" rel="noopener sponsored">
+      <small>Sponsored by</small>
+      <img src="/assets/img/ifza.png" alt="IFZA" width="400" height="101" />
+    </a>
   );
 }
 

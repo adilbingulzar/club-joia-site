@@ -15,10 +15,10 @@
 export type Product = { id: string; name: string; price: number; tier: string; codes: string[]; stock: number | null; visible: boolean };
 
 const tiers = [
-  { slug: 'ruby-red', name: 'Ruby Red', prices: { '3-days': 7000, 'sat': 3000, 'sun': 4500, 'sat-sun': 6800, 'fri-sun': 5200, 'fri-sat': 4000 }, extra: [] as string[] },
-  { slug: 'pearly-white', name: 'Pearly White', prices: { '3-days': 10000, 'sat': 4500, 'sun': 6000, 'sat-sun': 8500, 'fri-sun': 6500, 'fri-sat': 5000 }, extra: [] as string[] },
+  { slug: 'ruby-red', name: 'Ruby Red', prices: { '3-days': 7000, 'sat': 3000, 'sun': 4500, 'sat-day': 1200, 'sun-day': 2400, 'sat-sun': 6800, 'fri-sun': 5200, 'fri-sat': 4000 }, extra: [] as string[] },
+  { slug: 'pearly-white', name: 'Pearly White', prices: { '3-days': 10000, 'sat': 4500, 'sun': 6000, 'sat-day': 1500, 'sun-day': 3000, 'sat-sun': 8500, 'fri-sun': 6500, 'fri-sat': 5000 }, extra: [] as string[] },
   // VVIP parking is an Ultra Black perk
-  { slug: 'ultra-black', name: 'Ultra Black', prices: { '3-days': 15000, 'sat': 6500, 'sun': 9000, 'sat-sun': 12750, 'fri-sun': 9750, 'fri-sat': 7500 }, extra: ['PARK'] }
+  { slug: 'ultra-black', name: 'Ultra Black', prices: { '3-days': 15000, 'sat': 6500, 'sun': 9000, 'sat-day': 2250, 'sun-day': 4500, 'sat-sun': 12750, 'fri-sun': 9750, 'fri-sat': 7500 }, extra: ['PARK'] }
 ];
 
 // AFTER (the after-race celebration on Sunday) comes with every package that has Sunday.
@@ -28,6 +28,9 @@ const packages = [
   { id: '3-days', name: '3 days', codes: ['FRI', 'SAT', 'SUN', 'AFTER'], onSale: true },
   { id: 'sat', name: 'Saturday', codes: ['SAT'], onSale: true },
   { id: 'sun', name: 'Sunday', codes: ['SUN', 'AFTER'], onSale: true },
+  // daytime only: their own ticket types (members app: Admin > Events), valid for the day's daytime hours
+  { id: 'sat-day', name: 'Saturday daytime', codes: ['SAT_DAY'], onSale: true },
+  { id: 'sun-day', name: 'Sunday daytime', codes: ['SUN_DAY'], onSale: true },
   { id: 'sat-sun', name: 'Saturday & Sunday', codes: ['SAT', 'SUN', 'AFTER'], onSale: false },
   { id: 'fri-sun', name: 'Friday & Sunday', codes: ['FRI', 'SUN', 'AFTER'], onSale: false },
   { id: 'fri-sat', name: 'Friday & Saturday', codes: ['FRI', 'SAT'], onSale: false }

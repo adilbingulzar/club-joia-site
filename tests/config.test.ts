@@ -20,8 +20,8 @@ describe('tickets', function () {
     expect(ticket('nope')).toBeNull();
   });
 
-  it('sells every access level for 3 days, Saturday and Sunday only', function () {
-    expect(cfg.packages.map(function (p) { return p.id; })).toEqual(['3-days', 'sat', 'sun']);
+  it('sells every access level for 3 days, Saturday, Sunday, and Saturday or Sunday daytime only', function () {
+    expect(cfg.packages.map(function (p) { return p.id; })).toEqual(['3-days', 'sat', 'sun', 'sat-day', 'sun-day']);
     expect(ticket('ruby-red/sat-sun')).toBeNull();
     expect(ticket('ruby-red/fri-sat')).toBeNull();
   });

@@ -52,6 +52,10 @@ export default function Home() {
           <SiteNav cta={{ href: '/tickets', label: 'Get your access', badge: true }} />
           <div className="hero-body" id="top">
             <div>
+              <figure className="press-quote">
+                <figcaption><small>As quoted by</small> <b>Esquire</b></figcaption>
+                <blockquote>&ldquo;Black Coffee, caviar and a 65-metre superyacht: Inside Abu Dhabi Grand Prix&rsquo;s most exclusive party&rdquo;</blockquote>
+              </figure>
               <h1>3rd year edition of the exclusive trackside mega yacht experience at the Abu Dhabi Grand Prix.</h1>
               <p className="when">Abu Dhabi Grand Prix &nbsp;|&nbsp; <span>December 4, 5 &amp; 6</span></p>
               <p className="avail">Full weekend mega yacht experience</p>
@@ -60,7 +64,7 @@ export default function Home() {
                   return <li key={t.id}><Link href={t.page}><i className={'sw ' + t.swatch}></i><b>{t.name}</b><span><Price tier={t.id} pkg="3-days" /></span></Link></li>;
                 })}
               </ul>
-              <p className="hero-note">Prices for 3-day access. Saturday and Sunday day access also available.</p>
+              <p className="hero-note">Prices for 3-day access. Saturday, Sunday and daytime-only access also available.</p>
               <div className="btns">
                 <Link className="btn" href="/tickets">Book your access</Link>
                 <span className="ltd">Limited availability</span>
@@ -151,10 +155,15 @@ export default function Home() {
         <section className="band" id="access">
           <div className="wrap">
             <h2>Choose your access</h2>
-            <p style={{ color: 'var(--mute)', margin: 0, maxWidth: '60ch' }}>Three access levels, each available for all three days or as a single Saturday or Sunday.</p>
+            <p style={{ color: 'var(--mute)', margin: 0, maxWidth: '60ch' }}>Three access levels, each available for all three days, a single Saturday or Sunday, or daytime only.</p>
             <div className="access-cards">
               {tiers.map(function (t) {
-                return <Link className="access-card" href={t.page} key={t.id}><img src={t.card} alt={t.name + ' membership card'} width="2000" height="1262" loading="lazy" /><b>{t.name}</b><small>{t.perks.length + ' benefits, 3 days '}<Price tier={t.id} pkg="3-days" /></small></Link>;
+                return <Link className="access-card" href={t.page} key={t.id}><img src={t.card} alt={t.name + ' membership card'} width="2000" height="1262" loading="lazy" /><b>{t.name}</b><small>{t.perks.length + ' benefits, 3 days '}<Price tier={t.id} pkg="3-days" /></small>
+                  <span className="day-prices">
+                    {cfg.packages.filter(function (p) { return p.id !== '3-days'; }).map(function (p) {
+                      return <span className="day-price" key={p.id}><span><em>{p.name}</em> {p.dates.split(',')[0]}</span><strong><Price tier={t.id} pkg={p.id} /></strong></span>;
+                    })}
+                  </span></Link>;
               })}
             </div>
           </div>

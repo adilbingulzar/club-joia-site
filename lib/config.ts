@@ -33,7 +33,9 @@ export type Ticket = {
 const packages: Package[] = [
   { id: '3-days',  name: '3 days',              dates: 'Friday, Saturday & Sunday, December 4, 5 & 6' },
   { id: 'sat',     name: 'Saturday',            dates: 'Qualifying day, December 5' },
-  { id: 'sun',     name: 'Sunday',              dates: 'Race day, December 6' }
+  { id: 'sun',     name: 'Sunday',              dates: 'Race day, December 6' },
+  { id: 'sat-day', name: 'Saturday daytime',    dates: 'Qualifying day, daytime only, December 5' },
+  { id: 'sun-day', name: 'Sunday daytime',      dates: 'Race day, daytime only, December 6' }
 ];
 
 const rubyPerks = [
@@ -62,21 +64,21 @@ const tiers: Tier[] = [
     card: '/assets/img/cards/ruby-red.webp',
     intro: 'The essential Club JOIA 300 experience: mega yacht access, open bar, a premium culinary experience and the best view of the track.',
     perks: rubyPerks, newFrom: 0,
-    prices: { '3-days': 7000, 'sat': 3000, 'sun': 4500 }
+    prices: { '3-days': 7000, 'sat': 3000, 'sun': 4500, 'sat-day': 1200, 'sun-day': 2400 }
   },
   {
     id: 'pearly-white', name: 'Pearly White', swatch: 'pearl', page: '/pearly-white',
     card: '/assets/img/cards/pearly-white.webp',
     intro: 'Everything in Ruby Red, plus daytime sundeck access, priority access and shared chauffeur transfers.',
     perks: pearlyPerks, newFrom: rubyPerks.length,
-    prices: { '3-days': 10000, 'sat': 4500, 'sun': 6000 }
+    prices: { '3-days': 10000, 'sat': 4500, 'sun': 6000, 'sat-day': 1500, 'sun-day': 3000 }
   },
   {
     id: 'ultra-black', name: 'Ultra Black', swatch: 'black', page: '/ultra-black',
     card: '/assets/img/cards/ultra-black.webp',
     intro: 'The top tier: everything in Pearly White, plus VIP after-party sundeck access, a dedicated chauffeur or VIP parking, premium plus beverages during the after-party and a personal concierge.',
     perks: ultraPerks, newFrom: pearlyPerks.length,
-    prices: { '3-days': 15000, 'sat': 6500, 'sun': 9000 }
+    prices: { '3-days': 15000, 'sat': 6500, 'sun': 9000, 'sat-day': 2250, 'sun-day': 4500 }
   }
 ];
 

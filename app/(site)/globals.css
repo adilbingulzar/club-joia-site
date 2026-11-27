@@ -26,6 +26,17 @@ nav{position:relative;z-index:2;display:flex;justify-content:space-between;align
 .lockup img{display:block;width:100%;height:auto}
 .lockup-tag{display:block;margin-top:2.6cqi;margin-right:-.12em;font:500 3.1cqi/1 'Inter Tight','Outfit',sans-serif;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;color:#fff}
 .flogo{--h:56px;margin:0 auto 36px}
+/* brand: the logo, then "Sponsored by IFZA" (beside it on wide screens, under it on smaller ones) */
+.brand{display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0}
+.sponsor{display:flex;align-items:center;gap:8px;text-decoration:none;color:#fff;line-height:1}
+.sponsor small{font:600 9px/1 'Inter Tight','Outfit',sans-serif;letter-spacing:.16em;text-transform:uppercase;opacity:.85}
+.sponsor img{display:block;height:16px;width:auto}
+@media(min-width:1100px){
+ .brand{flex-direction:row;align-items:center;gap:0}
+ .sponsor{flex-direction:column;gap:8px;margin-left:26px;padding-left:26px;border-left:1px solid rgba(255,255,255,.35)}
+ .sponsor small{font-size:10px}
+ .sponsor img{height:26px}
+}
 .nav-cta{font-size:15px;font-weight:500;text-decoration:none;border:1px solid var(--gold);padding:10px 20px;border-radius:99px;transition:background .2s,color .2s}
 .nav-cta:hover{background:var(--gold);color:var(--ink)}
 .hero .nav-cta:not(:hover){background:rgba(5,5,5,.5)}
@@ -192,7 +203,17 @@ button.btn{border:0;cursor:pointer;font-family:inherit}
 .price-list li{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 0;border-bottom:1px solid var(--line)}
 .price-list b{display:block;font-weight:500}
 .price-list small{display:block;color:var(--mute);font-size:13px}
-.price-list span{font-family:var(--disp);font-weight:600;font-size:clamp(15px,1.8vw,20px);color:var(--gold);white-space:nowrap}
+.price-list span{font-family:var(--disp);font-weight:600;font-size:clamp(15px,1.8vw,20px);color:var(--gold);white-space:nowrap;text-align:right}
+/* a dollar price's dirham amount, underneath */
+small.aed{display:block;margin-top:4px;font-family:var(--body);font-weight:400;font-size:13px;letter-spacing:0;color:var(--mute)}
+.from small.aed{font-size:14px}
+/* hero: a press quote above the headline */
+.press-quote{margin:clamp(8px,4vh,48px) 0 34px;padding:2px 0 2px 20px;border-left:1px solid rgba(255,255,255,.55);max-width:520px}
+.press-quote figcaption{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+.press-quote figcaption small{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.75)}
+.press-quote figcaption b{font-family:'Didot','Bodoni 72','Bodoni MT','Playfair Display',Georgia,serif;font-weight:700;font-size:24px;letter-spacing:.06em;text-transform:uppercase;color:#fff;line-height:1}
+.press-quote blockquote{margin:0;font-style:italic;font-size:15px;line-height:1.6;color:rgba(255,255,255,.9)}
+@media(max-width:480px){.press-quote{margin-bottom:24px;padding-left:14px}.press-quote figcaption b{font-size:20px}.press-quote blockquote{font-size:14px}}
 .perk-group+.perk-group{margin-top:28px}
 .perk-group h3{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:400;margin:0 0 6px}
 .perks{list-style:none;margin:0;padding:0;columns:2;column-gap:28px}
@@ -214,6 +235,11 @@ button.btn{border:0;cursor:pointer;font-family:inherit}
 .access-card:hover img{transform:translateY(-4px) rotate(-1deg)}
 .access-card b{display:block;font-family:var(--disp);font-weight:800;margin:18px 0 2px}
 .access-card small{color:var(--mute);font-size:14px}
+/* the card's Saturday and Sunday prices, under its 3-day price */
+.day-prices{display:block;margin-top:16px;border-top:1px solid var(--line)}
+.day-price{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:13px 0;border-bottom:1px solid var(--line);color:var(--mute);font-size:14px}
+.day-price em{font-style:normal;color:var(--cream);font-size:15px;margin-right:6px}
+.day-price strong{font-family:var(--disp);font-weight:700;color:var(--cream);font-size:15px;white-space:nowrap}
 .hero-tiers a{display:flex;align-items:center;gap:14px;width:100%;text-decoration:none}
 .hero-tiers a:hover b{color:var(--gold)}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
