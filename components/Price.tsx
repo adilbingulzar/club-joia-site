@@ -1,14 +1,13 @@
 import { Suspense } from 'react';
 import { getCatalog, priceText } from '@/lib/catalog';
-
-// the dirham is pegged to the dollar
-const AED_PER_USD = 3.6725;
+import { money } from '@/lib/config';
+import { convert } from '@/lib/currency';
 
 async function PriceValue({ tier, pkg, aed }: { tier: string; pkg: string; aed?: boolean }) {
   const catalog = await getCatalog();
   const t = catalog.tickets[tier + '/' + pkg];
   const inAed = aed && catalog.live && catalog.currency === 'USD' && t && t.price !== null
-    ? 'AED ' + Math.round(t.price * AED_PER_USD).toLocaleString('en-US') : null;
+    ? money(convert(t.price, catalog.currency, 'AED'), 'AED') : null;
   return <>{priceText(catalog, tier, pkg)}{inAed && <small className="aed">{inAed}</small>}</>;
 }
 

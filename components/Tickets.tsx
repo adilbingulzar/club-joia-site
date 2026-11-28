@@ -52,7 +52,7 @@ export function TierBlocks() {
                   <li className={'opt' + (!soldOut && q > 0 ? ' has-qty' : '')} id={'o-' + domId(t.id)} key={t.id}><div><b>{t.pkg.name}</b><small>{t.pkg.dates}</small></div>
                     <span className="price">{!catalog.ready
                       ? <i className="sk-line" role="img" aria-label="Loading price"></i>
-                      : !catalog.live ? 'Price unavailable' : catalog.onSale(t.id) ? catalog.money(catalog.price(t.id)) : ''}</span>
+                      : !catalog.live ? 'Price unavailable' : catalog.onSale(t.id) ? <>{catalog.money(catalog.price(t.id))}{catalog.aed(t.id) && <small className="aed">{catalog.aed(t.id)}</small>}</> : ''}</span>
                     {!catalog.ready
                       ? <i className="sk-stepper" aria-hidden="true"></i>
                       : !catalog.live || !catalog.onSale(t.id)

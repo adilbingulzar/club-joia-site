@@ -53,8 +53,8 @@ export default function Home() {
           <div className="hero-body" id="top">
             <div>
               <figure className="press-quote">
-                <figcaption><small>As quoted by</small> <b>Esquire</b></figcaption>
-                <blockquote>&ldquo;Black Coffee, caviar and a 65-metre superyacht: Inside Abu Dhabi Grand Prix&rsquo;s most exclusive party&rdquo;</blockquote>
+                <figcaption><small>As quoted by</small> <a href="https://www.esquireme.com/brief/club-joia-300-abu-dhabi-grand-prix-superyacht" target="_blank" rel="noopener"><img src="/assets/img/esquire.png" alt="Esquire" width="600" height="149" /></a></figcaption>
+                <blockquote>&ldquo;Inside Abu Dhabi Grand Prix&rsquo;s most exclusive party&rdquo;</blockquote>
               </figure>
               <h1>3rd year edition of the exclusive trackside mega yacht experience at the Abu Dhabi Grand Prix.</h1>
               <p className="when">Abu Dhabi Grand Prix &nbsp;|&nbsp; <span>December 4, 5 &amp; 6</span></p>

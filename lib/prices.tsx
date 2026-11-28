@@ -56,7 +56,12 @@ export function useCatalog() {
     price: function (id: string): number { return live && c!.tickets[id] && c!.tickets[id].price !== null ? convert(c!.tickets[id].price!, base, currency) : 0; },
     soldOut: function (id: string): boolean { return !live || !c!.tickets[id] || c!.tickets[id].soldOut; },
     onSale: function (id: string): boolean { return live && !!c!.tickets[id] && c!.tickets[id].price !== null; },
-    money: function (n: number): string { return money(n, c ? currency : ''); }
+    money: function (n: number): string { return money(n, c ? currency : ''); },
+    // a ticket's price in dirhams, to show under the dollar price; '' when it is shown in dirhams already
+    aed: function (id: string): string {
+      return live && currency !== 'AED' && payCurrencies(base).indexOf('AED') >= 0 && c!.tickets[id] && c!.tickets[id].price !== null
+        ? money(convert(c!.tickets[id].price!, base, 'AED'), 'AED') : '';
+    }
   };
 }
 
